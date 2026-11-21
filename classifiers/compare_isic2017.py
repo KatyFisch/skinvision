@@ -146,7 +146,7 @@ def run_training(data_dir: Path, device: torch.device) -> None:
     print(f"Validation results and locked cutoffs: {run_dir}")
 
 
-def run_test(data_dir: Path, run_dir: Path, device: torch.device) -> None:
+def run_test(data_dir: Path, run_dir: Path, device: torch.device, *, include_milk_test: bool = False) -> None:
     settings = json.loads((run_dir / "validation_metrics.json").read_text())
     isic, isic_digest = load_isic(data_dir)
     if isic_digest != settings["isic_manifest_sha256"]:
@@ -155,14 +155,25 @@ def run_test(data_dir: Path, run_dir: Path, device: torch.device) -> None:
     if checksum != settings["checkpoint_sha256"] or str(weights.transforms()) != settings["preprocess"]:
         raise ValueError("The pretrained checkpoint configuration differs from the validation run")
     pretrained = load_checkpoint(weights.url, checksum, data_dir)
-    test = isic.loc[isic.split.eq("test")]
+    test = isic.loc[isic.split.eq("test")].assign(source="ISIC2017")
+    if include_milk_test:
+        milk_content = (data_dir / "splits" / MILK_MANIFEST).read_bytes()
+        if hashlib.sha256(milk_content).hexdigest() != settings["milk_manifest_sha256"]:
+            raise ValueError("MILK10k manifest differs from the version used in training")
+        milk = pd.read_csv(BytesIO(milk_content))
+        milk_test = milk.loc[milk.split.eq("test")].rename(columns={"lesion_id": "image_id", "dermoscopic_path": "image_path"})
+        test = pd.concat([test, milk_test.assign(source="MILK10k")], ignore_index=True)
     batches = DataLoader(LesionImages(test, data_dir, weights.transforms(), ["image_path"]), batch_size=settings["batch_size"])
     model = LesionResNet18(build_encoder(ENCODER, pretrained, device), views=1).to(device)
     targets = test.target.to_numpy(dtype=int)
     predictions = test[["image_id", "target", "group_id"]].copy()
+    if include_milk_test:
+        predictions.insert(0, "source", test.source)
+    subsets = {"pooled": np.ones(len(test), dtype=bool), **{source: test.source.eq(source).to_numpy() for source in test.source.unique()}}
     results = {}
     for recipe in RECIPES:
-        print(f"Scoring frozen ISIC test split: {recipe}", flush=True)
+        split_label = "ISIC and MILK10k test splits" if include_milk_test else "ISIC test split"
+        print(f"Scoring {split_label}: {recipe}", flush=True)
         fold_scores = []
         for fold in settings["folds"]:
             model.load_state_dict(torch.load(run_dir / f"{recipe}-fold-{fold}.pt", map_location="cpu", weights_only=True))
@@ -170,15 +181,27 @@ def run_test(data_dir: Path, run_dir: Path, device: torch.device) -> None:
         scores = np.mean(fold_scores, axis=0, dtype=np.float64)
         cutoff = settings["results"][recipe]["isic_validation"]["threshold"]
         summary = summarize_at_threshold(targets, scores, cutoff)
-        results[recipe] = summary
+        if include_milk_test:
+            results[recipe] = {
+                "locked_cutoffs": {name: summarize_at_threshold(targets[mask], scores[mask], cutoff) for name, mask in subsets.items()},
+                "exploratory_matched_sensitivity": {
+                    name: summarize(targets[mask], scores[mask], settings["sensitivity_target"]) for name, mask in subsets.items()
+                },
+            }
+        else:
+            results[recipe] = summary
         print(
             f"  AUC {summary['roc_auc']:.3f}, sensitivity {summary['sensitivity']:.1%}, specificity {summary['specificity']:.1%}",
             flush=True,
         )
         predictions[f"{recipe}_score"] = scores
-    predictions.to_csv(run_dir / "isic_test_predictions.csv", index=False)
-    save_json(run_dir / "isic_test_metrics.json", {"isic_manifest_sha256": isic_digest, "results": results})
-    print(f"Test results: {run_dir / 'isic_test_metrics.json'}")
+    prefix = "combined_test" if include_milk_test else "isic_test"
+    predictions.to_csv(run_dir / f"{prefix}_predictions.csv", index=False)
+    report = {"isic_manifest_sha256": isic_digest, "results": results}
+    if include_milk_test:
+        report.update(milk_manifest_sha256=settings["milk_manifest_sha256"], sensitivity_target=settings["sensitivity_target"])
+    save_json(run_dir / f"{prefix}_metrics.json", report)
+    print(f"Test results: {run_dir / f'{prefix}_metrics.json'}")
 
 
 def main() -> None:
@@ -187,12 +210,15 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--test-run", type=Path, help="Apply saved checkpoints and validation cutoffs from this run to the ISIC test split")
+    parser.add_argument("--include-milk-test", action="store_true", help="Also score the local MILK10k holdout and report pooled results")
     args = parser.parse_args()
+    if args.include_milk_test and not args.test_run:
+        parser.error("--include-milk-test requires --test-run")
     data_dir = args.data_dir.expanduser().resolve()
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
     if args.test_run:
-        run_test(data_dir, args.test_run.expanduser().resolve(), device)
+        run_test(data_dir, args.test_run.expanduser().resolve(), device, include_milk_test=args.include_milk_test)
     else:
         run_training(data_dir, device)
 

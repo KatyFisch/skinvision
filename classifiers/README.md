@@ -95,4 +95,8 @@ uv run --locked python -m classifiers.compare_isic2017 --test-run data/experimen
 ```
 
 The run keeps validation and test reports under `data/experiments/mel-nv/`.
-The MILK10k test split remains reserved for the selected paired model.
+Add `--include-milk-test` to also score the local MILK10k holdout without
+changing the checkpoints or ISIC validation cutoffs. The combined reports
+keep metrics by dataset and pool the two test sets. They also report the
+exploratory comparison at matched sensitivity, which uses test labels to find
+the comparison cutoffs.
