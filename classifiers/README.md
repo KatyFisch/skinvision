@@ -116,6 +116,10 @@ photos. The report compares frozen, fine-tuned, and refitted scores on the
 held-out development folds. Look for the `-resnet18-clinical-finetune` run in
 the experiments directory.
 
+Use the [clinical augmentation experiment](augmentation/README.md) to compare
+brightness, contrast, and horizontal flips against the saved clinical-only
+baseline on the same development folds and MILK10k holdout.
+
 ## Compare images with and without age
 
 ```sh

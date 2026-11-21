@@ -4,7 +4,7 @@ import argparse
 import json
 import math
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -82,7 +82,7 @@ class LesionResNet18(nn.Module):
 
 
 def train_last_block(
-    model: LesionResNet18, batches: DataLoader, device: torch.device, epochs: int, head_lr: float, block_lr: float
+    model: LesionResNet18, batches: DataLoader | Sequence[DataLoader], device: torch.device, epochs: int, head_lr: float, block_lr: float
 ) -> Iterator[float]:
     last_block = model.encoder.get_submodule("layer4").requires_grad_(True)
     optimizer = torch.optim.AdamW([{"params": model.head.parameters(), "lr": head_lr}, {"params": last_block.parameters(), "lr": block_lr}])
@@ -93,7 +93,8 @@ def train_last_block(
         model.encoder.eval()
         loss_sum = 0.0
         samples = 0
-        for *views, targets in batches:
+        epoch_batches = batches if isinstance(batches, DataLoader) else batches[epoch - 1]
+        for *views, targets in epoch_batches:
             optimizer.zero_grad(set_to_none=True)
             logits = model(*(view.to(device) for view in views))
             loss = criterion(logits, targets.to(device))
