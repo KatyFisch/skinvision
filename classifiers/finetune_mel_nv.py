@@ -4,7 +4,7 @@ import argparse
 import json
 import math
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
@@ -66,22 +66,24 @@ class PairedResNet18(nn.Module):
     def logits_from_embeddings(self, embeddings: torch.Tensor) -> torch.Tensor:
         return self.head((embeddings - self.mean) / self.scale).squeeze(-1)
 
-    def forward(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> torch.Tensor:
+    def embeddings(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> torch.Tensor:
         views = self.encoder(torch.cat((clinical, dermoscopy), dim=0)).chunk(2, dim=0)
-        return self.logits_from_embeddings(torch.cat(views, dim=1))
+        return torch.cat(views, dim=1)
+
+    def forward(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> torch.Tensor:
+        return self.logits_from_embeddings(self.embeddings(clinical, dermoscopy))
 
 
 def train_last_block(
     model: PairedResNet18, batches: DataLoader, device: torch.device, epochs: int, head_lr: float, block_lr: float
-) -> list[float]:
-    model.train()
-    # Keep the pretrained BatchNorm running statistics fixed in both views.
-    model.encoder.eval()
+) -> Iterator[float]:
     last_block = model.encoder.get_submodule("layer4").requires_grad_(True)
     optimizer = torch.optim.AdamW([{"params": model.head.parameters(), "lr": head_lr}, {"params": last_block.parameters(), "lr": block_lr}])
     criterion = nn.BCEWithLogitsLoss()
-    epoch_losses = []
     for epoch in range(1, epochs + 1):
+        model.train()
+        # Keep the pretrained BatchNorm running statistics fixed in both views.
+        model.encoder.eval()
         loss_sum = 0.0
         samples = 0
         for clinical, dermoscopy, targets in batches:
@@ -95,9 +97,8 @@ def train_last_block(
         epoch_loss = loss_sum / samples
         if not math.isfinite(epoch_loss):
             raise RuntimeError(f"Training loss was non-finite at epoch {epoch}")
-        epoch_losses.append(epoch_loss)
         print(f"  Pass 2 epoch {epoch}/{epochs}: train loss {epoch_loss:.4f}", flush=True)
-    return epoch_losses
+        yield epoch_loss
 
 
 @torch.inference_mode()
@@ -105,6 +106,11 @@ def predict(model: PairedResNet18, batches: DataLoader, device: torch.device) ->
     model.eval()
     scores = [model(clinical.to(device), dermoscopy.to(device)).sigmoid().cpu().numpy() for clinical, dermoscopy, _ in batches]
     return np.concatenate(scores)
+
+
+def checkpoint_path(run_dir: Path, fold: int, variant: str) -> Path:
+    suffix = "" if variant == "fine_tuned" else f"-{variant.replace('_', '-')}"
+    return run_dir / f"fold-{fold}{suffix}.pt"
 
 
 def main() -> None:
@@ -142,15 +148,17 @@ def main() -> None:
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     output_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-resnet18-finetune"
     output_dir.mkdir(parents=True)
-    frozen_scores = np.empty(len(development))
-    fine_tuned_scores = np.empty(len(development))
+    epoch_variants = {
+        epoch: "fine_tuned" if epoch == args.epochs else f"epoch_{epoch}" for epoch in (1, 2, args.epochs) if epoch <= args.epochs
+    }
+    scores_by_variant = {name: np.empty(len(development)) for name in ("frozen", *epoch_variants.values())}
     fold_losses = {}
     for fold in sorted(set(folds.tolist())):
         validation = folds == fold
         training = ~validation
         print(f"Fold {fold}, pass 1: fitting logistic regression on frozen embeddings", flush=True)
         head = fit_frozen_head(features[training], targets[training])
-        frozen_scores[validation] = head.predict_proba(features[validation])[:, 1]
+        scores_by_variant["frozen"][validation] = head.predict_proba(features[validation])[:, 1]
         model = PairedResNet18(build_encoder(ENCODER, checkpoint, device))
         model.load_frozen_head(head)
         model.to(device)
@@ -160,23 +168,31 @@ def main() -> None:
         generator = torch.Generator().manual_seed(args.seed + fold)
         train_batches = DataLoader(train_pairs, batch_size=args.batch_size, shuffle=True, generator=generator)
         validation_batches = DataLoader(validation_pairs, batch_size=args.batch_size)
-        fold_losses[fold] = train_last_block(model, train_batches, device, args.epochs, args.head_lr, args.block_lr)
-        fine_tuned_scores[validation] = predict(model, validation_batches, device)
-        torch.save({name: value.cpu() for name, value in model.state_dict().items()}, output_dir / f"fold-{fold}.pt")
+        fold_losses[fold] = []
+        for epoch, loss in enumerate(train_last_block(model, train_batches, device, args.epochs, args.head_lr, args.block_lr), start=1):
+            fold_losses[fold].append(loss)
+            if epoch in epoch_variants:
+                variant = epoch_variants[epoch]
+                scores_by_variant[variant][validation] = predict(model, validation_batches, device)
+                torch.save({name: value.cpu() for name, value in model.state_dict().items()}, checkpoint_path(output_dir, fold, variant))
 
     predictions = development[["lesion_id", "diagnosis_code", "target", "validation_fold"]].copy()
+    summaries = {name: summarize(targets, scores, args.sensitivity_target) for name, scores in scores_by_variant.items()}
     results = {}
-    for name, scores in [("frozen", frozen_scores), ("fine_tuned", fine_tuned_scores)]:
+    for name, scores in scores_by_variant.items():
         predictions[f"{name}_score"] = scores
-        summary = summarize(targets, scores, args.sensitivity_target)
+        summary = summaries[name]
         results[name] = {
             **summary,
+            "nearby_sensitivity": {target: summarize(targets, scores, target) for target in (0.94, 0.95, 0.96, 0.97, 0.98)},
             "by_fold": {
                 fold: summarize(targets[folds == fold], scores[folds == fold], args.sensitivity_target) for fold in sorted(fold_losses)
             },
         }
         print(f"{name}: AUC {summary['roc_auc']:.3f}, sensitivity {summary['sensitivity']:.1%}, specificity {summary['specificity']:.1%}")
 
+    selected_variant = max(summaries, key=lambda name: summaries[name]["specificity"])
+    print(f"Selected at the development sensitivity target: {selected_variant}")
     predictions.to_csv(output_dir / "validation_predictions.csv", index=False)
     settings = {
         "manifest": MANIFEST,
@@ -187,6 +203,7 @@ def main() -> None:
         "seed": args.seed,
         "batch_size_pairs": args.batch_size,
         "exploratory_sensitivity_target": args.sensitivity_target,
+        "selected_variant": selected_variant,
         "pass_1": "StandardScaler and LogisticRegression(C=1.0, max_iter=2000) on frozen paired features",
         "pass_2": {
             "trainable": ["head", "encoder.layer4"],
@@ -195,6 +212,7 @@ def main() -> None:
             "head_lr": args.head_lr,
             "block_lr": args.block_lr,
             "epochs": args.epochs,
+            "checkpoint_epochs": {variant: epoch for epoch, variant in epoch_variants.items()},
             "training_loss_by_fold": fold_losses,
         },
         "elapsed_seconds": perf_counter() - start,

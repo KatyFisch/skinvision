@@ -44,8 +44,27 @@ Each fold runs two passes using only its training lesions:
    block uses `0.0001`. Earlier layers and BatchNorm running statistics stay
    fixed. Both passes use the checkpoint's original image preprocessing.
 
-The run compares both passes on the same held-out development folds. Per-fold
-metrics use a separate exploratory cutoff for each fold. The overall metrics
-use one cutoff selected from the pooled development predictions for each pass.
-Each run saves both sets of scores, the training losses, and one final
-checkpoint per fold under `data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
+The run compares the frozen baseline and checkpoints after epochs 1, 2, and 5
+on the same held-out development folds. With `--epochs`, the final checkpoint
+is saved at the requested epoch. The overall metrics use one cutoff from the
+pooled development predictions for each checkpoint and sensitivity target.
+Per-fold metrics use a separate exploratory cutoff for each fold. The run
+selects the variant with the highest pooled specificity at the target
+sensitivity, preferring the earliest variant in a tie. Scores, training
+losses, and fold checkpoints are saved under
+`data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
+
+## Compare images with and without age
+
+```sh
+uv run --locked python -m classifiers.compare_age data/experiments/mel-nv/your-run-id-resnet18-finetune
+```
+
+Pass the path printed by the fine-tuning run. For each development fold, use the
+selected variant's encoder to extract paired features. Use `--variant fine_tuned`
+to compare the final checkpoint when another variant was selected. Fit two logistic
+regression heads on those same training features, one with age appended. Use
+the training-fold median for missing ages when fitting the age head. At
+prediction time, use the image-only score when age is missing. The report
+includes per-fold results and missed melanoma counts by age group. It lives in
+an `age-<run-id>/` subdirectory of the source run.
