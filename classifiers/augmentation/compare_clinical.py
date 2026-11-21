@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image, ImageEnhance, ImageOps
-from torch.utils.data import DataLoader
+from torch.utils.data import ConcatDataset, DataLoader
 
 from classifiers.encoders import CHECKPOINTS, build_encoder, encode_pairs, load_checkpoint
 from classifiers.finetune_mel_nv import ENCODER, LesionImages, LesionResNet18, checkpoint_path, predict, train_last_block
@@ -114,7 +114,7 @@ def main() -> None:
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     asset_dir = data_dir / "augmented" / "milk10k-clinical-mel-nv" / run_id
-    run_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-resnet18-clinical-augmentation"
+    run_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-resnet18-clinical-expanded-augmentation"
     run_dir.mkdir(parents=True)
     print(f"Saving training images to {asset_dir}", flush=True)
     epoch_rows = create_assets(development, data_dir, asset_dir, epochs, seed)
@@ -126,25 +126,30 @@ def main() -> None:
     fold_numbers = sorted(set(folds.tolist()))
     development_scores = np.empty(len(development))
     losses = {}
+    training_counts = {}
 
     for fold in fold_numbers:
         validation = folds == fold
-        print(f"Training fold {fold} on {(~validation).sum()} lesions per epoch", flush=True)
+        original_images = LesionImages(development.loc[~validation], data_dir, preprocess, IMAGE_COLUMNS)
         head = fit_frozen_head(features[~validation], targets[~validation])
         model = LesionResNet18(build_encoder(ENCODER, pretrained, device), views=1)
         model.load_frozen_head(head)
         model.to(device)
         generator = torch.Generator().manual_seed(seed + fold)
 
-        training_batches = [
-            DataLoader(
-                LesionImages(rows.loc[~validation], data_dir, preprocess, IMAGE_COLUMNS),
-                batch_size=batch_size,
-                shuffle=True,
-                generator=generator,
-            )
+        training_images = [
+            ConcatDataset([original_images, LesionImages(rows.loc[~validation], data_dir, preprocess, IMAGE_COLUMNS)])
             for rows in epoch_rows
         ]
+        training_batches = [DataLoader(images, batch_size=batch_size, shuffle=True, generator=generator) for images in training_images]
+        originals = len(original_images)
+        variants = len(training_images[0]) - originals
+        training_counts[fold] = {
+            "original_images_per_epoch": originals,
+            "augmented_images_per_epoch": variants,
+            "optimizer_steps_per_epoch": len(training_batches[0]),
+        }
+        print(f"Training fold {fold} on {originals} original and {variants} augmented photos per epoch", flush=True)
         losses[fold] = list(train_last_block(model, training_batches, device, epochs, recipe["head_lr"], recipe["block_lr"]))
         validation_images = LesionImages(development.loc[validation], data_dir, preprocess, IMAGE_COLUMNS)
         development_scores[validation] = predict(model, DataLoader(validation_images, batch_size=batch_size), device)
@@ -172,6 +177,7 @@ def main() -> None:
         "head_lr": recipe["head_lr"],
         "block_lr": recipe["block_lr"],
         "sensitivity_target": sensitivity_target,
+        "training_counts_by_fold": training_counts,
         "training_loss_by_fold": losses,
         "results": development_results,
     }

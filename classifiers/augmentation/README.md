@@ -18,11 +18,13 @@ applies them in that order, and flips the photo horizontally with probability
 The assets and their source manifest, `assets.csv`, live in
 `data/augmented/milk10k-clinical-mel-nv/<run-id>/`.
 
-Each fold uses variants only for its training lesions during five epochs of
-last-block fine-tuning. The initial logistic head uses the original training
-photos, as in the baseline. Each epoch still visits every eligible lesion once.
-This compares the final epoch-five checkpoint on both sides. Development and
-holdout scores use original clinical photos with the same ImageNet preprocessing.
+Each epoch shuffles 638 original training photos together with 638 augmented
+copies in each fold. The model sees both views of every eligible training
+lesion during each epoch. The initial logistic head fits the original training
+photos, as in the baseline. Both runs fine-tune the last block for five epochs.
+The expanded training set takes 80 optimizer steps per epoch. The baseline
+takes 40 with the same batch size. Development and holdout scores use original
+clinical photos with the same ImageNet preprocessing.
 The labels and lesion groups come from the [frozen MILK10k split](../eval_split/README.md).
 
 The development report pools the predictions from the fold that held each
@@ -34,6 +36,6 @@ at matched sensitivity using cutoffs computed from the holdout labels. This
 describes the trade-off on these photos and does not establish a future cutoff.
 
 The checkpoints, metrics, and per-lesion predictions live in
-`data/experiments/mel-nv/<run-id>-resnet18-clinical-augmentation/`.
+`data/experiments/mel-nv/<run-id>-resnet18-clinical-expanded-augmentation/`.
 Both output directories are ignored by Git. The experiment evaluates MILK10k
 clinical close-ups and uses a single training seed.
