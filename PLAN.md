@@ -1,9 +1,9 @@
 # SkinVision project plan
 
-The goal is to learn how to build and evaluate a classifier that can suggest
-possible skin lesion diagnoses from a single ordinary phone photo. Start with a
-reproducible data audit, then test how far a simple classifier gets. Use the
-results to decide what a private educational demo can responsibly show.
+The goal is an educational app that suggests possible skin lesion diagnoses from
+an ordinary phone photo. Develop three classifiers on the paired MILK10k images
+first. The app will use one to route a photo to either a MEL-vs-NV specialist or
+a classifier covering all MILK10k diagnoses.
 
 ## What we verified about MILK10k
 
@@ -34,11 +34,10 @@ published dataset is licensed CC BY-NC.
 [MILK10k dataset paper](https://pubmed.ncbi.nlm.nih.gov/40701400/)
 [ISIC download and license information](https://challenge.isic-archive.com/data/#milk10k)
 
-ISIC offers automated scoring today on a blind holdout of 479 lesions from the
-same sources. The download page lists ground truth as unavailable. We can use
-the official scorer once we freeze a model. For development, set aside labeled
-validation data from the training release. Assess performance on self-taken
-phone photos in a separate evaluation before making any claims about that use.
+ISIC offers automated scoring on a blind holdout of 479 lesions from the same
+sources. The download page lists ground truth as unavailable. We can use the
+official scorer once the all-diagnosis classifier is frozen. Assess performance
+on self-taken phone photos in a separate evaluation.
 [MILK10k benchmark and scoring](https://challenge.isic-archive.com/landing/milk10k/)
 
 ## 1. Audit the data in JupyterLab
@@ -65,34 +64,64 @@ questions before we train a model.
 **Done when** both collaborators can run the notebook and agree on the unit of
 analysis, label mapping, and known limits on splitting and evaluation.
 
-## 2. Freeze the evaluation protocol
+## 2. Use one split across all three classifiers
 
-- Use the [MEL-vs-NV manifest](data_prep/README.md) with a 20% test holdout and
-  three folds inside the training split. Retain each lesion's original
-  assignment, with its two views and any exact duplicates together. Group by
-  patient if IDs become available.
-- Choose the model and the melanoma score threshold on the validation folds.
-  Agree on an exploratory sensitivity target with the biostatistics collaborator
-  and compare specificity at that target.
-- Report sensitivity, specificity against nevi, and counts of missed melanomas
-  and flagged nevi with uncertainty. Inspect performance by skin tone wherever
-  counts support it.
+- Use the [MEL-vs-NV manifest](data_prep/README.md) for the specialist. For the
+  router and the all-diagnosis classifier, use the parent MILK10k assignments in
+  the local `data/splits/archive/milk10k-v1.csv`. The 20% holdout and three
+  development folds stay fixed across all three tasks. Restore the full-manifest
+  export from the existing split recipe when preparing the broader models.
+- Keep both views of each lesion and known duplicates together. Group by patient
+  if IDs become available. Fit models and choose thresholds using the
+  development folds. Evaluate the finalized models and routing rules on the
+  held-out lesions.
 
-## 3. Train a paired-image baseline
+## 3. Train the three paired-image classifiers
 
-Start with a majority-class baseline and a small pretrained image model. Encode
-the clinical close-up and dermoscopic image and combine their features to score
-MEL against NV per lesion. Fine-tune if evaluation shows room for improvement,
-then inspect missed melanomas and shortcuts. Revisit segmentation if the error
-analysis shows the lesion is frequently missed.
+1. **MEL vs. NV specialist.** Train on melanomas (`MEL`) and melanocytic nevi
+   (`NV`). Agree on an exploratory melanoma sensitivity target with the
+   biostatistics collaborator and compare specificity against nevi at that
+   target. Report missed melanomas, flagged nevi, and uncertainty.
+2. **MEL-or-NV vs. other router.** Use every MILK10k diagnosis. Combine `MEL`
+   and `NV` into one target and map the other nine diagnoses to `Other`. Measure
+   how often melanomas and nevi reach the specialist, and which other diagnoses
+   are mistakenly sent there.
+3. **All-diagnosis classifier.** Predict one of the 11 original MILK10k
+   categories. Use it for cases routed to `Other` and as a standalone reference
+   for the full pipeline. Report macro F1, per-class recall with case counts,
+   and a confusion matrix.
 
-Keep filenames, identifiers, and the diagnostic supplement out of model
-features. Use the same split for later comparisons with either image alone or
-with available-at-capture metadata. Run the frozen model and threshold on the
-internal holdout.
+Start each task with a majority-class reference and a small pretrained image
+encoder. Combine features from the clinical and dermoscopic views into one
+prediction per lesion. Keep filenames, identifiers, and the diagnostic
+supplement out of model features. Fine-tune or revisit segmentation when
+validation errors give a reason to try it.
 
-## 4. Test the product assumption and build a private demo
+When the separate MEL/NV dataset is available, check usage terms, label
+definitions, image modalities, and overlap with the MILK10k holdout. Compare the
+specialist trained on MILK10k alone with a version that uses the additional
+data. Keep source-specific evaluation so we can see whether any gain transfers
+between datasets.
 
+## 4. Route and evaluate the full pipeline
+
+- Run the router first. Send `MEL-or-NV` cases to the specialist and `Other`
+  cases to the all-diagnosis classifier. The `Other` group includes benign
+  conditions and cancers such as basal cell carcinoma.
+- Tune routing on the development folds. Test an inconclusive response for
+  uncertain assignments and check what to do when the all-diagnosis classifier
+  returns `MEL` or `NV` after the router chose `Other`.
+- Compare the routed pipeline with the standalone all-diagnosis classifier on
+  the same holdout. Measure melanoma sensitivity from input to final output,
+  track whether missed melanomas came from routing or classification, and report
+  how often the system returns an inconclusive result. Inspect results by skin
+  tone wherever counts support it.
+
+## 5. Test the phone-photo workflow and build a private demo
+
+- Build and evaluate a version of each stage that accepts a single ordinary
+  photo. Use clinical-only MILK10k models as a starting point and test the
+  complete pipeline on self-taken photos.
 - Look for independently labeled, self-taken phone photos from the intended
   population. Check label compatibility and measure the effect of device,
   lighting, skin tone, image quality, and unfamiliar conditions. Test how often
