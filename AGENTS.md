@@ -10,6 +10,8 @@ machine learning and a biostatistics PhD collaborator.
   images. Evaluate ordinary phone photos when working toward the product.
 - Keep paired images and other known related samples together when splitting
   data. Document the split, label provenance, and limits of the evaluation.
+- Use native image resolution for routine classifier training. Treat resizing
+  or cropping as explicit comparison experiments.
 - Keep raw data in the ignored `data/` directory. Preserve dataset attribution
   and keep patient photos out of Git and notebook outputs committed to Git.
 - Keep early predictions in a private research demo using curated examples. The

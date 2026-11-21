@@ -67,7 +67,7 @@ def main() -> None:
     other_folds = other["validation_fold"].to_numpy(dtype=int)
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    features, encoder, cache_hit = encode_pairs(ENCODER, router, data_dir, device, args.batch_size)
+    features, encoder, cache_hit = encode_pairs(ENCODER, router, data_dir, device, args.batch_size, full_frame=True, native_resolution=True)
     other_features = features[router.index.get_indexer(other.index)]
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
@@ -110,6 +110,7 @@ def main() -> None:
     metrics = {
         "catalog_sha256": catalog.sha256,
         "parent_manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+        "native_resolution": True,
         "encoder": encoder,
         "feature_cache_hit": cache_hit,
         "scikit_learn": sklearn.__version__,

@@ -91,9 +91,10 @@ analysis, label mapping, and known limits on splitting and evaluation.
 
 Start each task with a majority-class reference and a small pretrained image
 encoder. Combine features from the clinical and dermoscopic views into one
-prediction per lesion. Keep filenames, identifiers, and the diagnostic
-supplement out of model features. Fine-tune or revisit segmentation when
-validation errors give a reason to try it.
+prediction per lesion. Use the full native-resolution frame when training the
+specialist, router, and other-diagnosis classifier. Keep filenames,
+identifiers, and the diagnostic supplement out of model features. Fine-tune
+or revisit segmentation when validation errors give a reason to try it.
 
 Evaluate approximate age as an optional input for the MEL-vs-NV specialist.
 Compare images alone with images plus age on the same development folds, and
@@ -123,10 +124,13 @@ between datasets.
 - Build and evaluate a version of each stage that accepts a single ordinary
   photo. Use clinical-only MILK10k models as a starting point and test the
   complete pipeline on self-taken photos.
-- Carry forward the originals-only training recipe for the clinical MEL-vs-NV
-  specialist. On the local MILK10k holdout, the originals-only run flagged 112
-  of 149 nevi and the expanded augmentation run flagged 113 at the same
-  sensitivity of 86 out of 90 melanomas.
+- Carry forward the clinical MEL-vs-NV model trained on the original
+  600 × 450 photos, with five epochs of fine-tuning and a refitted head.
+  The three selected development checkpoints are in
+  `data/models/clinical-mel-nv/`.
+  In the earlier center-crop augmentation experiment, the originals-only run
+  flagged 112 of 149 nevi and the expanded augmentation run flagged 113 at
+  the same sensitivity of 86 out of 90 melanomas.
   [Clinical augmentation experiment](classifiers/augmentation/README.md)
 - Look for independently labeled, self-taken phone photos from the intended
   population. Check label compatibility and measure the effect of device,

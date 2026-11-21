@@ -1,5 +1,10 @@
 # Lesion classifiers
 
+Routine MILK10k training uses the full native **600 × 450** photos with the
+checkpoint's RGB normalization. The selected clinical MEL-vs-NV variant is
+the native-resolution, five-epoch run with a refitted head. Its three local
+development checkpoints are in `data/models/clinical-mel-nv/`.
+
 ## Use the preprocessed image catalog
 
 Pass `--catalog final_data.csv` to the classifier commands to use the export from
@@ -44,9 +49,10 @@ uv run --locked python -m classifiers.train_routed --catalog final_data.csv
 ```
 
 The baseline fits two logistic-regression heads on shared frozen ResNet-18
-features, one clinical and one dermoscopic image per lesion. It trains each
-head inside the development folds and writes the fitted heads, predictions,
-and metrics under `data/experiments/routed/`. Use `--data-dir` for shared data.
+features from a native-resolution clinical and dermoscopic image per lesion.
+It trains each head inside the development folds and writes the fitted heads,
+predictions, and metrics under `data/experiments/routed/`. Use `--data-dir` for
+shared data.
 
 - **Router.** Train on every MILK10k lesion. The positive class is `MEL_OR_NV`
   (1), and the negative class is `OTHER` (0). Choose the exploratory cutoff
@@ -70,6 +76,7 @@ uv run --locked python -m classifiers.train_mel_nv
 Pass `--data-dir /path/to/data` when using a shared dataset from a worktree. Use
 `--encoder resnet18` or `--encoder convnext_tiny` to run one encoder.
 `--sensitivity-target` controls the exploratory target and defaults to 0.95.
+Use `--center-crop` to reproduce the historical 224 × 224 comparison.
 
 Both pretrained encoders stay frozen. The script concatenates the clinical and
 dermoscopic features and fits the same regularized logistic regression recipe on
@@ -81,8 +88,8 @@ later evaluation of the selected model and threshold.
 
 Checkpoints are saved model weights. Here the checkpoints are the official
 ImageNet-1K V1 weights for ResNet-18 and ConvNeXt-Tiny. The script verifies and
-records the full SHA-256 hashes and uses each checkpoint's documented
-preprocessing. Verify the publisher, license, training data, and preprocessing
+records the full SHA-256 hashes and uses each checkpoint's RGB normalization.
+Verify the publisher, license, training data, and preprocessing
 before trying a new checkpoint. Keep track of any possible overlap with
 evaluation images.
 
@@ -102,7 +109,7 @@ Each fold runs two passes using only its training lesions:
 2. Load that head into PyTorch and update it along with ResNet's last block
    (`layer4`) for five epochs. The head uses a learning rate of `0.001` and the
    block uses `0.0001`. Earlier layers and BatchNorm running statistics stay
-   fixed. Both passes use the checkpoint's original image preprocessing.
+   fixed. Both passes use the same native-resolution inputs.
 
 The run compares the frozen baseline and checkpoints after epochs 1, 2, and 5
 on the same held-out development folds. With `--epochs`, the final checkpoint
@@ -112,26 +119,26 @@ Per-fold metrics use a separate exploratory cutoff for each fold. The run
 selects the variant with the highest pooled specificity at the target
 sensitivity, preferring the earliest variant in a tie. Scores, training
 losses, and fold checkpoints are saved under
-`data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
+`data/experiments/mel-nv/<run-id>-resnet18-finetune-full-frame-native/`.
 
 ## Fine-tune on clinical photos only
 
 ```sh
-uv run --locked python -m classifiers.finetune_mel_nv --clinical-only
+uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only
 ```
 
 This uses one clinical close-up per lesion and the same development folds,
 learning rates, and five-epoch recipe. After the last epoch, fit a fresh
 logistic-regression head on the fine-tuned features from that fold's training
 photos. The report compares frozen, fine-tuned, and refitted scores on the
-held-out development folds. Look for the `-resnet18-clinical-finetune` run in
-the experiments directory.
+held-out development folds. Look for the `-resnet18-clinical-finetune-full-frame-native`
+run in the experiments directory.
 
 To compare the standard center crop with the same resize and the full frame,
 run both commands on the same catalog and development folds.
 
 ```sh
-uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only
+uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only --center-crop
 uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only --full-frame
 ```
 
@@ -151,9 +158,9 @@ uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv -
 The native-resolution run keeps the decoded photo dimensions and applies the
 same RGB normalization. It writes a separate `-full-frame-native` run.
 
-Use the [clinical augmentation experiment](augmentation/README.md) to compare
-brightness, contrast, and horizontal flips against the saved clinical-only
-baseline on the same development folds and MILK10k holdout.
+The [historical clinical augmentation experiment](augmentation/README.md)
+compares brightness, contrast, and horizontal flips against the saved
+center-crop baseline on the same development folds and MILK10k holdout.
 
 ## Compare images with and without age
 
