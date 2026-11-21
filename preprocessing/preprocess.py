@@ -18,6 +18,7 @@ OUTPUT_PATH = DATA_DIR / "final_data.csv"
 # MILK10k
 df_milk_truth = pd.read_csv(DATA_DIR / "MILK10k_Training_GroundTruth.csv")
 df_milk_meta = pd.read_csv(DATA_DIR / "MILK10k_Training_Metadata.csv")
+df_milk_supplement = pd.read_csv(DATA_DIR / "MILK10k_Training_Supplement.csv")
 
 df_milk = df_milk_meta.merge(df_milk_truth, on="lesion_id", how="left", validate="many_to_one")
 
@@ -34,6 +35,11 @@ df_isic = df_isic_meta.merge(df_isic_truth, on="image_id", how="left", validate=
 
 categories = ["AKIEC", "BCC", "BEN_OTH", "BKL", "DF", "INF", "MAL_OTH", "MEL", "NV", "SCCKA", "VASC"]
 
+# --------------------------------------------------
+# Add diagnosis type
+# --------------------------------------------------
+
+df_milk = df_milk.merge(df_milk_supplement[["isic_id", "diagnosis_confirm_type"]], on="isic_id", how="left", validate="many_to_one")
 
 # --------------------------------------------------
 # Preprocess MILK10k
@@ -58,7 +64,7 @@ milk_columns = [
     "age",
     "sex",
     "skin_tone_class",
-    "image_manipulation",
+    "diagnosis_confirm_type",
     *categories,
     "path",
     "path_segmentation",
@@ -72,7 +78,6 @@ df_milk = df_milk[milk_columns]
 # --------------------------------------------------
 
 df_isic["age"] = df_isic["age_approximate"]
-df_isic["image_manipulation"] = pd.NA
 df_isic["skin_tone_class"] = pd.NA
 
 df_isic["path"] = df_isic["image_id"].apply(lambda x: Path("ISIC-2017_Training_resizedImages") / f"{x}.jpg")
@@ -81,6 +86,7 @@ df_isic["path_segmentation"] = df_isic["image_id"].apply(lambda x: Path("ISIC-20
 
 df_isic = df_isic.rename(columns={"melanoma": "MEL"})
 df_isic["NV"] = ((df_isic["MEL"] == 0) & (df_isic["seborrheic_keratosis"] == 0)).astype(float)
+df_isic["diagnosis_confirm_type"] = pd.NA
 
 # Keep only MEL and NV diagnoses
 for category in categories:
@@ -98,7 +104,7 @@ isic_columns = [
     "age",
     "sex",
     "skin_tone_class",
-    "image_manipulation",
+    "diagnosis_confirm_type",
     *categories,
     "path",
     "path_segmentation",
