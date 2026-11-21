@@ -18,6 +18,7 @@ from sklearn.pipeline import Pipeline
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from classifiers.catalog import load_catalog
 from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, encode_pairs, load_checkpoint, load_image
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
@@ -129,6 +130,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_data_dir = Path(__file__).resolve().parents[1] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_data_dir)))
+    parser.add_argument("--catalog", type=Path, help="Image catalog CSV, relative to --data-dir or absolute")
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--clinical-only", action="store_true", help="Use only the clinical view and refit the head after the final epoch")
     parser.add_argument("--batch-size", type=int, default=16, help="Lesions per batch")
@@ -149,7 +151,8 @@ def main() -> None:
     torch.manual_seed(args.seed)
     start = perf_counter()
 
-    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST)
+    catalog = load_catalog(args.catalog, data_dir)
+    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST, catalog)
     targets = development["target"].to_numpy(dtype=int)
     folds = development["validation_fold"].to_numpy(dtype=int)
     image_columns = ["clinical_path"] if args.clinical_only else IMAGE_COLUMNS
@@ -245,6 +248,8 @@ def main() -> None:
     }
     if args.clinical_only:
         settings["refit"] = "StandardScaler and LogisticRegression(C=1.0, max_iter=2000) on final fine-tuned training features"
+    if catalog is not None:
+        settings["catalog_sha256"] = catalog.sha256
     (output_dir / "metrics.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     print(f"Results: {output_dir}")
 

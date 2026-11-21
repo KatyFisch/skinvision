@@ -15,6 +15,7 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 
+from classifiers.catalog import ImageCatalog, load_catalog
 from classifiers.encoders import CHECKPOINTS, build_encoder, load_checkpoint
 from classifiers.eval_split.split_isic2017 import MANIFEST as ISIC_MANIFEST
 from classifiers.finetune_mel_nv import (
@@ -29,7 +30,7 @@ from classifiers.finetune_mel_nv import (
     train_last_block,
 )
 from classifiers.train_mel_nv import MANIFEST as MILK_MANIFEST
-from classifiers.train_mel_nv import fit_frozen_head, load_development, summarize, summarize_at_threshold
+from classifiers.train_mel_nv import TARGET_BY_DIAGNOSIS, fit_frozen_head, load_development, summarize, summarize_at_threshold
 
 SEED = 42
 BATCH_SIZE = 16
@@ -41,8 +42,11 @@ def load_isic(data_dir: Path) -> tuple[pd.DataFrame, str]:
     content = (data_dir / "splits" / ISIC_MANIFEST).read_bytes()
     manifest = pd.read_csv(BytesIO(content))
     usable = manifest.loc[manifest.split.isin(["train", "validation", "test"])].copy()
-    if not manifest.image_id.is_unique or usable.group_id.isna().any() or not usable.groupby("group_id").split.nunique().eq(1).all():
+    partitions = manifest[["group_id", "split"]].drop_duplicates()
+    if not manifest.image_id.is_unique or partitions.group_id.isna().any() or not partitions.group_id.is_unique:
         raise ValueError("Expected unique image IDs and duplicate groups confined to one ISIC split")
+    if not usable.target.eq(usable.diagnosis_code.map(TARGET_BY_DIAGNOSIS)).fillna(False).all():
+        raise ValueError("Expected binary labels MEL=1 and NV=0 in the ISIC manifest")
     if set(usable.split) != {"train", "validation", "test"} or not usable.groupby("split").target.nunique().eq(2).all():
         raise ValueError("Expected training, validation, and test with both diagnoses in each ISIC split")
     return usable, hashlib.sha256(content).hexdigest()
@@ -52,10 +56,12 @@ def save_json(path: Path, content: dict) -> None:
     path.write_text(json.dumps(content, indent=2) + "\n", encoding="utf-8")
 
 
-def run_training(data_dir: Path, device: torch.device) -> None:
-    milk, milk_digest = load_development(data_dir / "splits" / MILK_MANIFEST)
+def run_training(data_dir: Path, device: torch.device, catalog: ImageCatalog | None = None) -> None:
+    milk, milk_digest = load_development(data_dir / "splits" / MILK_MANIFEST, catalog)
     isic, isic_digest = load_isic(data_dir)
     isic = isic.loc[isic.split.ne("test")]
+    if catalog is not None:
+        isic = catalog.isic_images(isic)
     milk = milk.rename(columns={"lesion_id": "image_id", "dermoscopic_path": "image_path"}).assign(source="MILK10k")
     isic = isic.assign(source="ISIC2017")
     rows = pd.concat([milk, isic], ignore_index=True)
@@ -129,6 +135,7 @@ def run_training(data_dir: Path, device: torch.device) -> None:
         {
             "milk_manifest_sha256": milk_digest,
             "isic_manifest_sha256": isic_digest,
+            **({"catalog_sha256": catalog.sha256} if catalog is not None else {}),
             "checkpoint_sha256": checksum,
             "preprocess": str(preprocess),
             "versions": {"torch": torch.__version__, "torchvision": torchvision.__version__, "scikit_learn": sklearn.__version__},
@@ -146,8 +153,11 @@ def run_training(data_dir: Path, device: torch.device) -> None:
     print(f"Validation results and locked cutoffs: {run_dir}")
 
 
-def run_test(data_dir: Path, run_dir: Path, device: torch.device, *, include_milk_test: bool = False) -> None:
+def run_test(
+    data_dir: Path, run_dir: Path, device: torch.device, *, include_milk_test: bool = False, catalog_path: Path | None = None
+) -> None:
     settings = json.loads((run_dir / "validation_metrics.json").read_text())
+    catalog = load_catalog(catalog_path, data_dir, expected_sha256=settings.get("catalog_sha256"))
     isic, isic_digest = load_isic(data_dir)
     if isic_digest != settings["isic_manifest_sha256"]:
         raise ValueError("ISIC manifest differs from the version used in training")
@@ -156,12 +166,17 @@ def run_test(data_dir: Path, run_dir: Path, device: torch.device, *, include_mil
         raise ValueError("The pretrained checkpoint configuration differs from the validation run")
     pretrained = load_checkpoint(weights.url, checksum, data_dir)
     test = isic.loc[isic.split.eq("test")].assign(source="ISIC2017")
+    if catalog is not None:
+        test = catalog.isic_images(test)
     if include_milk_test:
         milk_content = (data_dir / "splits" / MILK_MANIFEST).read_bytes()
         if hashlib.sha256(milk_content).hexdigest() != settings["milk_manifest_sha256"]:
             raise ValueError("MILK10k manifest differs from the version used in training")
         milk = pd.read_csv(BytesIO(milk_content))
-        milk_test = milk.loc[milk.split.eq("test")].rename(columns={"lesion_id": "image_id", "dermoscopic_path": "image_path"})
+        milk_test = milk.loc[milk.split.eq("test")]
+        if catalog is not None:
+            milk_test = catalog.milk_lesions(milk_test)
+        milk_test = milk_test.rename(columns={"lesion_id": "image_id", "dermoscopic_path": "image_path"})
         test = pd.concat([test, milk_test.assign(source="MILK10k")], ignore_index=True)
     batches = DataLoader(LesionImages(test, data_dir, weights.transforms(), ["image_path"]), batch_size=settings["batch_size"])
     model = LesionResNet18(build_encoder(ENCODER, pretrained, device), views=1).to(device)
@@ -198,6 +213,8 @@ def run_test(data_dir: Path, run_dir: Path, device: torch.device, *, include_mil
     prefix = "combined_test" if include_milk_test else "isic_test"
     predictions.to_csv(run_dir / f"{prefix}_predictions.csv", index=False)
     report = {"isic_manifest_sha256": isic_digest, "results": results}
+    if catalog is not None:
+        report["catalog_sha256"] = catalog.sha256
     if include_milk_test:
         report.update(milk_manifest_sha256=settings["milk_manifest_sha256"], sensitivity_target=settings["sensitivity_target"])
     save_json(run_dir / f"{prefix}_metrics.json", report)
@@ -208,6 +225,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_dir = Path(__file__).resolve().parents[1] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
+    parser.add_argument("--catalog", type=Path, help="Image catalog CSV, relative to --data-dir or absolute")
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--test-run", type=Path, help="Apply saved checkpoints and validation cutoffs from this run to the ISIC test split")
     parser.add_argument("--include-milk-test", action="store_true", help="Also score the local MILK10k holdout and report pooled results")
@@ -218,9 +236,11 @@ def main() -> None:
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
     if args.test_run:
-        run_test(data_dir, args.test_run.expanduser().resolve(), device, include_milk_test=args.include_milk_test)
+        run_test(
+            data_dir, args.test_run.expanduser().resolve(), device, include_milk_test=args.include_milk_test, catalog_path=args.catalog
+        )
     else:
-        run_training(data_dir, device)
+        run_training(data_dir, device, load_catalog(args.catalog, data_dir))
 
 
 if __name__ == "__main__":
