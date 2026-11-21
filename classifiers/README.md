@@ -127,6 +127,20 @@ photos. The report compares frozen, fine-tuned, and refitted scores on the
 held-out development folds. Look for the `-resnet18-clinical-finetune` run in
 the experiments directory.
 
+To compare the standard center crop with the same resize and the full frame,
+run both commands on the same catalog and development folds.
+
+```sh
+uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only
+uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only --full-frame
+```
+
+The second run keeps the resized 341 × 256 MILK10k frames. The resize and
+normalization match the standard ResNet transform. Batching uses the common
+4:3 aspect ratio of these clinical photos. Compare the same head variant in
+each run at the target melanoma sensitivity. The full-frame run has a separate
+feature cache entry and a `-full-frame` directory suffix.
+
 Use the [clinical augmentation experiment](augmentation/README.md) to compare
 brightness, contrast, and horizontal flips against the saved clinical-only
 baseline on the same development folds and MILK10k holdout.

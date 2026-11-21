@@ -13,6 +13,7 @@ import torch
 import torchvision
 from PIL import Image, ImageOps
 from torch import nn
+from torchvision import transforms
 from torchvision.models import ConvNeXt_Tiny_Weights, ResNet18_Weights, convnext_tiny, resnet18
 
 CHECKPOINTS = {
@@ -21,6 +22,20 @@ CHECKPOINTS = {
 }
 FEATURE_CACHE_VERSION = 1
 IMAGE_COLUMNS = ["clinical_path", "dermoscopic_path"]
+
+
+def build_preprocess(name: str, *, full_frame: bool = False) -> Callable[[Image.Image], torch.Tensor]:
+    standard = CHECKPOINTS[name][0].transforms()
+    if not full_frame:
+        return standard
+    return transforms.Compose(
+        [
+            transforms.Resize(standard.resize_size, interpolation=standard.interpolation, antialias=standard.antialias),
+            transforms.PILToTensor(),
+            transforms.ConvertImageDtype(torch.float32),
+            transforms.Normalize(standard.mean, standard.std),
+        ]
+    )
 
 
 def load_image(path: Path, preprocess: Callable[[Image.Image], torch.Tensor]) -> torch.Tensor:
@@ -65,12 +80,19 @@ def feature_cache_path(
 
 
 def encode_pairs(
-    name: str, pairs: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int, *, image_columns: Sequence[str] = IMAGE_COLUMNS
+    name: str,
+    pairs: pd.DataFrame,
+    data_dir: Path,
+    device: torch.device,
+    batch_size: int,
+    *,
+    image_columns: Sequence[str] = IMAGE_COLUMNS,
+    full_frame: bool = False,
 ) -> tuple[np.ndarray, dict[str, str], bool]:
     """Extract and concatenate the selected image views per lesion."""
     weights, sha256 = CHECKPOINTS[name]
     checkpoint = load_checkpoint(weights.url, sha256, data_dir)
-    preprocess = weights.transforms()
+    preprocess = build_preprocess(name, full_frame=full_frame)
     settings = {
         "checkpoint": str(weights),
         "url": weights.url,
