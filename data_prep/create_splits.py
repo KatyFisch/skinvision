@@ -1,4 +1,4 @@
-"""Freeze the MILK10k lesion-level test split and development folds."""
+"""Export the paired MEL-vs-NV subset of the frozen MILK10k splits."""
 
 import argparse
 import hashlib
@@ -10,7 +10,8 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
-MANIFEST_NAME = "milk10k-v1.csv"
+MANIFEST_NAME = "milk10k-mel-nv-v1.csv"
+TARGET_BY_DIAGNOSIS = {"NV": 0, "MEL": 1}
 SEED = 42
 SHUFFLES = 24
 IMAGE_COLUMNS = {"clinical: close-up": "clinical_path", "dermoscopic": "dermoscopic_path"}
@@ -95,17 +96,24 @@ def choose_folds(lesions: pd.DataFrame, n_splits: int, *, holdout_only: bool = F
 
 
 def assign_splits(lesions: pd.DataFrame) -> pd.DataFrame:
+    # Reproduce the original assignments before filtering to keep the holdout fixed.
     (test_rows,) = choose_folds(lesions, n_splits=5, holdout_only=True)
     test_ids = lesions.index[test_rows]
     development = lesions.drop(index=test_ids)
 
     assignments = lesions[["diagnosis_code", "clinical_path", "dermoscopic_path", "group_id"]].copy()
-    assignments["split"] = "development"
+    assignments["split"] = "train"
     assignments.loc[test_ids, "split"] = "test"
     assignments["validation_fold"] = pd.Series(pd.NA, index=assignments.index, dtype="Int64")
     for fold, rows in enumerate(choose_folds(development, n_splits=3), start=1):
         assignments.loc[development.index[rows], "validation_fold"] = fold
     return assignments
+
+
+def filter_mel_nv(assignments: pd.DataFrame) -> pd.DataFrame:
+    binary = assignments.loc[assignments["diagnosis_code"].isin(TARGET_BY_DIAGNOSIS)].copy()
+    binary["target"] = binary["diagnosis_code"].map(TARGET_BY_DIAGNOSIS)
+    return binary
 
 
 def save_manifest(manifest: pd.DataFrame, path: Path) -> None:
@@ -131,18 +139,14 @@ def main() -> None:
 
     lesions = load_lesions(data_dir)
     lesions["group_id"] = duplicate_groups(lesions, data_dir)
-    manifest = assign_splits(lesions)
+    manifest = filter_mel_nv(assign_splits(lesions))
     path = data_dir / "splits" / MANIFEST_NAME
     save_manifest(manifest, path)
 
     print(f"Manifest: {path}")
-    print(manifest.groupby("split").size().to_string())
-    print("\nDevelopment folds:")
-    print(manifest["validation_fold"].value_counts().sort_index().to_string())
-    for field in BALANCE_COLUMNS:
-        categories = lesions[field].astype("string").fillna("Missing")
-        print(f"\n{field}:")
-        print(pd.crosstab(categories, manifest["split"]).to_string())
+    print(pd.crosstab(manifest["diagnosis_code"], manifest["split"], margins=True).to_string())
+    print("\nTraining validation folds:")
+    print(pd.crosstab(manifest["diagnosis_code"], manifest["validation_fold"], margins=True).to_string())
 
 
 if __name__ == "__main__":

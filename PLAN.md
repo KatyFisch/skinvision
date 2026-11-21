@@ -67,32 +67,29 @@ analysis, label mapping, and known limits on splitting and evaluation.
 
 ## 2. Freeze the evaluation protocol
 
-- Use the [versioned split manifest](data_prep/README.md) with a 20% test
-  holdout and three development folds. Both views of each lesion and exact
-  duplicates share an assignment. Group by patient if IDs become available.
-- Use validation folds for model selection, calibration, and thresholds. Agree
-  with the biostatistics collaborator on what can be estimated with the
-  available sample sizes, and report counts and uncertainty alongside scores.
-- Compare models on the same lesions. Report a confusion matrix, macro F1 (each
-  class gets equal weight), and per-class precision and recall. Inspect missed
-  malignancies and performance by skin tone wherever counts support it. Record
-  the decision rule, since ISIC's official macro F1 uses a per-class probability
-  threshold of 0.5 and a local top-class prediction uses argmax.
-  [Official evaluation protocol](https://challenge.isic-archive.com/landing/milk10k/#evaluation)
+- Use the [MEL-vs-NV manifest](data_prep/README.md) with a 20% test holdout and
+  three folds inside the training split. Retain each lesion's original
+  assignment, with its two views and any exact duplicates together. Group by
+  patient if IDs become available.
+- Choose the model and the melanoma score threshold on the validation folds.
+  Agree on an exploratory sensitivity target with the biostatistics collaborator
+  and compare specificity at that target.
+- Report sensitivity, specificity against nevi, and counts of missed melanomas
+  and flagged nevi with uncertainty. Inspect performance by skin tone wherever
+  counts support it.
 
 ## 3. Train a paired-image baseline
 
 Start with a majority-class baseline and a small pretrained image model. Encode
-the clinical close-up and dermoscopic image and combine their features in one
-classifier head per lesion. Fine-tune if evaluation shows room for improvement,
-then inspect errors for missed predictions and shortcuts. Whole-image
-classification can get us to a baseline sooner. Revisit segmentation if the
-error analysis shows the lesion is frequently missed.
+the clinical close-up and dermoscopic image and combine their features to score
+MEL against NV per lesion. Fine-tune if evaluation shows room for improvement,
+then inspect missed melanomas and shortcuts. Revisit segmentation if the error
+analysis shows the lesion is frequently missed.
 
 Keep filenames, identifiers, and the diagnostic supplement out of model
 features. Use the same split for later comparisons with either image alone or
-with available-at-capture metadata. Run the frozen model on the internal holdout
-and consider an ISIC submission for comparison with the official benchmark.
+with available-at-capture metadata. Run the frozen model and threshold on the
+internal holdout.
 
 ## 4. Test the product assumption and build a private demo
 
@@ -103,9 +100,8 @@ and consider an ISIC submission for comparison with the official benchmark.
   Choose any abstention rule on development data and verify it on independent
   data, including out-of-scope photos.
 - Use curated, licensed examples in a local demo. Show the model's possible
-  categories and an inconclusive state. A model trained on 11 known categories
-  can return a high score for something outside all 11, and calibration on
-  clinic images cannot establish reliability on self-taken photos.
+  categories and an inconclusive state. Include melanoma look-alikes and other
+  lesion types in later evaluations of the phone-photo workflow.
 - Treat public predictions on real user photos as a separate decision. Before
   pursuing that use, review the independent evidence with a dermatologist and
   address how people interpret the output, privacy for uploaded images, dataset
