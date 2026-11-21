@@ -69,6 +69,30 @@ shared data.
   F1, per-class recall with counts, and a confusion matrix. Evaluate the
   complete routing pipeline separately using the same held-out lesions.
 
+### Fine-tune the shared encoder
+
+```sh
+uv run --locked python -m classifiers.finetune_routed --catalog final_data.csv
+```
+
+This starts each fold from the frozen logistic heads and trains both heads
+and ResNet-18's last block for five epochs. The router loss uses all training
+lesions. The nine-class loss uses true `OTHER` lesions. The encoder is shared
+by the two tasks. The command reuses a local float32 cache of the frozen
+layers for the native photos, which takes about 9.4 GB for MILK10k.
+
+The report compares the frozen baseline, the joint fine-tune, and fresh
+logistic heads fit on the fine-tuned features. It saves fold checkpoints,
+development predictions, and metrics under `data/experiments/routed-finetune/`.
+
+In the three MILK10k development folds (`20261121T194734757774Z`), the refit
+gave the best results. At 95% melanoma routing sensitivity (342 of 360), the
+router sent 790 of 3,235 Other lesions to the specialist, compared with 1,221
+for the frozen encoder. Nine-class macro F1 rose from 0.300 to 0.341, and
+accuracy rose from 62.8% to 70.0%. The refit correctly classified 0 of 7
+`MAL_OTH` lesions. These figures use development predictions, with the
+separate test set reserved for later evaluation.
+
 ## Compare frozen paired-image encoders
 
 From the repository root, run the comparison using the existing
