@@ -84,6 +84,7 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_data_dir)))
     parser.add_argument("--catalog", type=Path, help="Image catalog CSV, relative to --data-dir or absolute")
     parser.add_argument("--encoder", choices=CHECKPOINTS, nargs="+", default=list(CHECKPOINTS))
+    parser.add_argument("--center-crop", action="store_true", help="Reproduce the original checkpoint crop")
     parser.add_argument("--sensitivity-target", type=float, default=0.95, help="Exploratory development target (default: 0.95)")
     parser.add_argument("--batch-size", type=int, default=16, help="Number of lesion pairs per encoder batch")
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"], default=None)
@@ -106,7 +107,9 @@ def main() -> None:
     print(f"Comparing on {len(development)} development lesions using {device}", flush=True)
     for name in dict.fromkeys(args.encoder):
         start = perf_counter()
-        features, settings, cache_hit = encode_pairs(name, development, data_dir, device, args.batch_size)
+        features, settings, cache_hit = encode_pairs(
+            name, development, data_dir, device, args.batch_size, full_frame=not args.center_crop, native_resolution=not args.center_crop
+        )
         feature_seconds = perf_counter() - start
         scores = predict_folds(features, targets, folds)
         predictions[f"{name}_score"] = scores
@@ -128,6 +131,7 @@ def main() -> None:
     settings = {
         "manifest": MANIFEST,
         "manifest_sha256": manifest_hash,
+        "native_resolution": not args.center_crop,
         "classifier": "StandardScaler and LogisticRegression(C=1.0, max_iter=2000), fit within each fold",
         "scikit_learn": sklearn.__version__,
         "batch_size_pairs": args.batch_size,

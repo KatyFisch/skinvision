@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from classifiers.catalog import load_catalog
-from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, encode_pairs, load_checkpoint
+from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, build_preprocess, encode_pairs, load_checkpoint
 from classifiers.finetune_mel_nv import ENCODER, LesionImages, LesionResNet18, checkpoint_path, encode_images
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
@@ -48,6 +48,8 @@ def main() -> None:
     data_dir = args.data_dir.expanduser().resolve()
     settings = json.loads((run_dir / "metrics.json").read_text())
     image_columns = settings.get("image_columns", IMAGE_COLUMNS)
+    full_frame = settings.get("full_frame", False)
+    native_resolution = settings.get("native_resolution", False)
     selected = args.variant or settings["selected_variant"]
     if selected not in settings["results"]:
         parser.error(f"Unknown variant {selected!r} for this run")
@@ -78,10 +80,20 @@ def main() -> None:
 
     frozen_features = None
     if selected == "frozen":
-        frozen_features, _, _ = encode_pairs(ENCODER, development, data_dir, device, batch_size, image_columns=image_columns)
+        frozen_features, _, _ = encode_pairs(
+            ENCODER,
+            development,
+            data_dir,
+            device,
+            batch_size,
+            image_columns=image_columns,
+            full_frame=full_frame,
+            native_resolution=native_resolution,
+        )
     else:
         pretrained = load_checkpoint(weights.url, checksum, data_dir)
-        batches = DataLoader(LesionImages(development, data_dir, weights.transforms(), image_columns), batch_size=batch_size)
+        preprocess = build_preprocess(ENCODER, full_frame=full_frame, native_resolution=native_resolution)
+        batches = DataLoader(LesionImages(development, data_dir, preprocess, image_columns), batch_size=batch_size)
 
     print(f"Comparing age heads using {selected} embeddings on {device}", flush=True)
     for fold in fold_numbers:
