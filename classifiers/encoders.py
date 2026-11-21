@@ -24,17 +24,19 @@ FEATURE_CACHE_VERSION = 1
 IMAGE_COLUMNS = ["clinical_path", "dermoscopic_path"]
 
 
-def build_preprocess(name: str, *, full_frame: bool = False) -> Callable[[Image.Image], torch.Tensor]:
+def build_preprocess(name: str, *, full_frame: bool = False, native_resolution: bool = False) -> Callable[[Image.Image], torch.Tensor]:
     standard = CHECKPOINTS[name][0].transforms()
     if not full_frame:
+        if native_resolution:
+            raise ValueError("Native resolution requires full-frame preprocessing")
         return standard
+    resize = (
+        []
+        if native_resolution
+        else [transforms.Resize(standard.resize_size, interpolation=standard.interpolation, antialias=standard.antialias)]
+    )
     return transforms.Compose(
-        [
-            transforms.Resize(standard.resize_size, interpolation=standard.interpolation, antialias=standard.antialias),
-            transforms.PILToTensor(),
-            transforms.ConvertImageDtype(torch.float32),
-            transforms.Normalize(standard.mean, standard.std),
-        ]
+        [*resize, transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float32), transforms.Normalize(standard.mean, standard.std)]
     )
 
 
@@ -88,11 +90,12 @@ def encode_pairs(
     *,
     image_columns: Sequence[str] = IMAGE_COLUMNS,
     full_frame: bool = False,
+    native_resolution: bool = False,
 ) -> tuple[np.ndarray, dict[str, str], bool]:
     """Extract and concatenate the selected image views per lesion."""
     weights, sha256 = CHECKPOINTS[name]
     checkpoint = load_checkpoint(weights.url, sha256, data_dir)
-    preprocess = build_preprocess(name, full_frame=full_frame)
+    preprocess = build_preprocess(name, full_frame=full_frame, native_resolution=native_resolution)
     settings = {
         "checkpoint": str(weights),
         "url": weights.url,

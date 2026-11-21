@@ -49,6 +49,7 @@ def main() -> None:
     settings = json.loads((run_dir / "metrics.json").read_text())
     image_columns = settings.get("image_columns", IMAGE_COLUMNS)
     full_frame = settings.get("full_frame", False)
+    native_resolution = settings.get("native_resolution", False)
     selected = args.variant or settings["selected_variant"]
     if selected not in settings["results"]:
         parser.error(f"Unknown variant {selected!r} for this run")
@@ -80,11 +81,18 @@ def main() -> None:
     frozen_features = None
     if selected == "frozen":
         frozen_features, _, _ = encode_pairs(
-            ENCODER, development, data_dir, device, batch_size, image_columns=image_columns, full_frame=full_frame
+            ENCODER,
+            development,
+            data_dir,
+            device,
+            batch_size,
+            image_columns=image_columns,
+            full_frame=full_frame,
+            native_resolution=native_resolution,
         )
     else:
         pretrained = load_checkpoint(weights.url, checksum, data_dir)
-        preprocess = build_preprocess(ENCODER, full_frame=full_frame)
+        preprocess = build_preprocess(ENCODER, full_frame=full_frame, native_resolution=native_resolution)
         batches = DataLoader(LesionImages(development, data_dir, preprocess, image_columns), batch_size=batch_size)
 
     print(f"Comparing age heads using {selected} embeddings on {device}", flush=True)

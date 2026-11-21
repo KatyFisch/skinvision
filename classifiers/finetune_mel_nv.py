@@ -135,6 +135,7 @@ def main() -> None:
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--clinical-only", action="store_true", help="Use only the clinical view and refit the head after the final epoch")
     parser.add_argument("--full-frame", action="store_true", help="Skip the center crop for the clinical-only experiment")
+    parser.add_argument("--native-resolution", action="store_true", help="Keep the original pixel dimensions in the full-frame experiment")
     parser.add_argument("--batch-size", type=int, default=16, help="Lesions per batch")
     parser.add_argument("--epochs", type=int, default=EPOCHS, help="Fixed number of epochs for pass 2")
     parser.add_argument("--head-lr", type=float, default=HEAD_LR, help="Pass 2 learning rate for the classifier head")
@@ -148,6 +149,8 @@ def main() -> None:
         parser.error("Learning rates must be finite and positive, with block-lr below head-lr")
     if args.full_frame and not args.clinical_only:
         parser.error("--full-frame requires --clinical-only")
+    if args.native_resolution and not args.full_frame:
+        parser.error("--native-resolution requires --full-frame")
 
     data_dir = args.data_dir.expanduser().resolve()
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
@@ -161,17 +164,26 @@ def main() -> None:
     folds = development["validation_fold"].to_numpy(dtype=int)
     image_columns = ["clinical_path"] if args.clinical_only else IMAGE_COLUMNS
     features, encoder_settings, cache_hit = encode_pairs(
-        ENCODER, development, data_dir, device, args.batch_size, image_columns=image_columns, full_frame=args.full_frame
+        ENCODER,
+        development,
+        data_dir,
+        device,
+        args.batch_size,
+        image_columns=image_columns,
+        full_frame=args.full_frame,
+        native_resolution=args.native_resolution,
     )
     weights, checksum = CHECKPOINTS[ENCODER]
     checkpoint = load_checkpoint(weights.url, checksum, data_dir)
-    preprocess = build_preprocess(ENCODER, full_frame=args.full_frame)
+    preprocess = build_preprocess(ENCODER, full_frame=args.full_frame, native_resolution=args.native_resolution)
     print(f"Training on development folds of {len(development)} lesions using {device}", flush=True)
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     run_suffix = "resnet18-clinical-finetune" if args.clinical_only else "resnet18-finetune"
     if args.full_frame:
         run_suffix += "-full-frame"
+    if args.native_resolution:
+        run_suffix += "-native"
     output_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-{run_suffix}"
     output_dir.mkdir(parents=True)
     epoch_variants = {epoch: f"epoch_{epoch}" for epoch in (1, 2) if epoch < args.epochs and not args.clinical_only}
@@ -232,6 +244,7 @@ def main() -> None:
         "manifest_sha256": manifest_hash,
         "image_columns": image_columns,
         "full_frame": args.full_frame,
+        "native_resolution": args.native_resolution,
         "encoder": encoder_settings,
         "feature_cache_hit": cache_hit,
         "scikit_learn": sklearn.__version__,

@@ -141,6 +141,16 @@ normalization match the standard ResNet transform. Batching uses the common
 each run at the target melanoma sensitivity. The full-frame run has a separate
 feature cache entry and a `-full-frame` directory suffix.
 
+To isolate resolution, compare that resized full-frame run with a native
+600 × 450 run using the same catalog and training options.
+
+```sh
+uv run --locked python -m classifiers.finetune_mel_nv --catalog final_data.csv --clinical-only --full-frame --native-resolution
+```
+
+The native-resolution run keeps the decoded photo dimensions and applies the
+same RGB normalization. It writes a separate `-full-frame-native` run.
+
 Use the [clinical augmentation experiment](augmentation/README.md) to compare
 brightness, contrast, and horizontal flips against the saved clinical-only
 baseline on the same development folds and MILK10k holdout.
