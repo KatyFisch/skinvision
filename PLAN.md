@@ -97,6 +97,11 @@ prediction per lesion. Keep filenames, identifiers, and the diagnostic
 supplement out of model features. Fine-tune or revisit segmentation when
 validation errors give a reason to try it.
 
+Evaluate approximate age as an optional input for the MEL-vs-NV specialist.
+Compare images alone with images plus age on the same development folds, and
+report melanoma sensitivity by age group. Use the image-only model as the
+fallback when age is omitted. Use recorded sex for dataset audits only.
+
 When the separate MEL/NV dataset is available, check usage terms, label
 definitions, image modalities, and overlap with the MILK10k holdout. Compare the
 specialist trained on MILK10k alone with a version that uses the additional
