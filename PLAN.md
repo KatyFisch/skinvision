@@ -121,9 +121,11 @@ between datasets.
 
 ## 5. Test the phone-photo workflow and build a private demo
 
-- Build and evaluate a version of each stage that accepts a single ordinary
-  photo. Use clinical-only MILK10k models as a starting point and test the
-  complete pipeline on self-taken photos.
+- The [single-photo pipeline](classifiers/README.md#run-the-single-photo-pipeline)
+  uses clinical-only MILK10k models for all three stages. The first holdout
+  run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked
+  development cutoffs. Improve specificity and evaluate the pipeline
+  separately on self-taken photos.
 - Carry forward the clinical MEL-vs-NV model trained on the original
   600 × 450 photos, with five epochs of fine-tuning and a refitted head.
   The three selected development checkpoints are in

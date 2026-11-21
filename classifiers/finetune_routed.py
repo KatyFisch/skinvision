@@ -1,4 +1,4 @@
-"""Fine-tune the shared ResNet-18 for the native paired router and diagnosis heads."""
+"""Fine-tune a shared ResNet-18 for the router and nine-class diagnosis head."""
 
 import argparse
 import hashlib
@@ -19,7 +19,15 @@ from torch.nn import functional
 from torch.utils.data import DataLoader
 
 from classifiers.catalog import load_catalog
-from classifiers.encoders import CHECKPOINTS, build_encoder, build_preprocess, encode_pairs, feature_cache_path, load_checkpoint
+from classifiers.encoders import (
+    CHECKPOINTS,
+    IMAGE_COLUMNS,
+    build_encoder,
+    build_preprocess,
+    encode_pairs,
+    feature_cache_path,
+    load_checkpoint,
+)
 from classifiers.eval_split.create_splits import FULL_MANIFEST_NAME
 from classifiers.eval_split.prepare_routed_tasks import OTHER_DIAGNOSIS_TARGETS, prepare_routed_tasks
 from classifiers.finetune_mel_nv import BLOCK_LR, EPOCHS, HEAD_LR, LesionImages
@@ -32,7 +40,9 @@ SEED = 42
 
 
 @torch.inference_mode()
-def cache_frozen_activations(rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int) -> np.ndarray:
+def cache_frozen_activations(
+    rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int, image_columns: list[str] = IMAGE_COLUMNS
+) -> np.ndarray:
     """Run the frozen part once per photo and memory-map its outputs across folds."""
     weights, checksum = CHECKPOINTS[ENCODER]
     preprocess = build_preprocess(ENCODER, full_frame=True, native_resolution=True)
@@ -44,29 +54,29 @@ def cache_frozen_activations(rows: pd.DataFrame, data_dir: Path, device: torch.d
         "torchvision": torchvision.__version__,
         "device": str(device),
     }
-    path = feature_cache_path(rows, data_dir, f"{ENCODER}-layer3-native", settings)
+    path = feature_cache_path(rows, data_dir, f"{ENCODER}-layer3-native", settings, image_columns=image_columns)
     if path.is_file():
         return np.load(path, mmap_mode="r", allow_pickle=False)
 
     checkpoint = load_checkpoint(weights.url, checksum, data_dir)
     encoder = build_encoder(ENCODER, checkpoint, device)
     trunk = nn.Sequential(*(encoder.get_submodule(name) for name in FROZEN_LAYERS)).eval()
-    batches = DataLoader(LesionImages(rows, data_dir, preprocess), batch_size=batch_size)
+    batches = DataLoader(LesionImages(rows, data_dir, preprocess, image_columns), batch_size=batch_size)
     path.parent.mkdir(parents=True, exist_ok=True)
     with NamedTemporaryFile(dir=path.parent, delete_on_close=False) as temporary:
         temporary.close()
         cache = None
         start = 0
-        for batch_index, (clinical, dermoscopy, _) in enumerate(batches):
-            encoded = trunk(torch.cat((clinical, dermoscopy)).to(device)).cpu().numpy()
-            pairs = np.stack(np.split(encoded, 2), axis=1)
+        for batch_index, (*views, _) in enumerate(batches):
+            encoded = trunk(torch.cat(views).to(device)).cpu().numpy()
+            pairs = np.stack(np.split(encoded, len(views)), axis=1)
             if cache is None:
                 cache = np.lib.format.open_memmap(temporary.name, mode="w+", dtype=pairs.dtype, shape=(len(rows), *pairs.shape[1:]))
             stop = start + len(pairs)
             cache[start:stop] = pairs
             start = stop
             if batch_index == 0 or (batch_index + 1) % 10 == 0 or stop == len(rows):
-                print(f"Cached frozen layers for {stop}/{len(rows)} lesion pairs", flush=True)
+                print(f"Cached frozen layers for {stop}/{len(rows)} lesions", flush=True)
         assert cache is not None and start == len(rows)
         cache.flush()
         del cache
@@ -78,11 +88,11 @@ class StandardizedHead(nn.Module):
     mean: torch.Tensor
     scale: torch.Tensor
 
-    def __init__(self, classes: int) -> None:
+    def __init__(self, classes: int, features: int) -> None:
         super().__init__()
-        self.linear = nn.Linear(1024, classes)
-        self.register_buffer("mean", torch.zeros(1024))
-        self.register_buffer("scale", torch.ones(1024))
+        self.linear = nn.Linear(features, classes)
+        self.register_buffer("mean", torch.zeros(features))
+        self.register_buffer("scale", torch.ones(features))
 
     @torch.no_grad()
     def load_fit(self, fitted: Pipeline) -> None:
@@ -98,11 +108,11 @@ class StandardizedHead(nn.Module):
 
 
 class RoutedResNet18(nn.Module):
-    def __init__(self, encoder: nn.Module) -> None:
+    def __init__(self, encoder: nn.Module, views: int = 2) -> None:
         super().__init__()
         self.encoder = encoder
-        self.router = StandardizedHead(1)
-        self.other = StandardizedHead(len(OTHER_DIAGNOSIS_TARGETS))
+        self.router = StandardizedHead(1, 512 * views)
+        self.other = StandardizedHead(len(OTHER_DIAGNOSIS_TARGETS), 512 * views)
 
     def embed_cached(self, pairs: torch.Tensor) -> torch.Tensor:
         maps = self.encoder.get_submodule("layer4")(pairs.flatten(0, 1))
@@ -111,7 +121,9 @@ class RoutedResNet18(nn.Module):
     def classify(self, features: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.router(features).squeeze(-1), self.other(features)
 
-    def forward(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, clinical: torch.Tensor, dermoscopy: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        if dermoscopy is None:
+            return self.classify(self.encoder(clinical))
         clinical_features, dermoscopy_features = self.encoder(torch.cat((clinical, dermoscopy))).chunk(2)
         return self.classify(torch.cat((clinical_features, dermoscopy_features), dim=1))
 
@@ -184,7 +196,8 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
     parser.add_argument("--catalog", type=Path, default=Path("final_data.csv"), help="Relative to --data-dir or absolute")
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
-    parser.add_argument("--batch-size", type=int, default=32, help="Lesion pairs per batch")
+    parser.add_argument("--clinical-only", action="store_true", help="Train from one clinical photo per lesion")
+    parser.add_argument("--batch-size", type=int, default=32, help="Lesions per batch")
     parser.add_argument("--epochs", type=int, default=EPOCHS)
     parser.add_argument("--melanoma-sensitivity", type=float, default=0.95)
     args = parser.parse_args()
@@ -205,15 +218,17 @@ def main() -> None:
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
     torch.manual_seed(SEED)
-    activation_cache = cache_frozen_activations(development, data_dir, device, args.batch_size)
+    image_columns = ["clinical_path"] if args.clinical_only else IMAGE_COLUMNS
+    activation_cache = cache_frozen_activations(development, data_dir, device, args.batch_size, image_columns)
     frozen, encoder_settings, _ = encode_pairs(
-        ENCODER, development, data_dir, device, args.batch_size, full_frame=True, native_resolution=True
+        ENCODER, development, data_dir, device, args.batch_size, image_columns=image_columns, full_frame=True, native_resolution=True
     )
     weights, checksum = CHECKPOINTS[ENCODER]
     checkpoint = load_checkpoint(weights.url, checksum, data_dir)
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    output_dir = data_dir / "experiments" / "routed-finetune" / run_id
+    experiment = "routed-finetune-clinical" if args.clinical_only else "routed-finetune"
+    output_dir = data_dir / "experiments" / experiment / run_id
     output_dir.mkdir(parents=True)
     print(f"Run directory: {output_dir}", flush=True)
     scores = {name: np.empty(len(development)) for name in VARIANTS}
@@ -228,7 +243,7 @@ def main() -> None:
         other_fit = fit_frozen_head(frozen[other_training], other_targets[other_training])
         scores["frozen"][validation] = router_fit.predict_proba(frozen[validation])[:, 1]
         predictions["frozen"][validation] = other_fit.predict(frozen[validation])
-        model = RoutedResNet18(build_encoder(ENCODER, checkpoint, device)).to(device)
+        model = RoutedResNet18(build_encoder(ENCODER, checkpoint, device), views=len(image_columns)).to(device)
         model.router.load_fit(router_fit)
         model.other.load_fit(other_fit)
         print(f"Fine-tuning fold {fold}", flush=True)
@@ -277,6 +292,7 @@ def main() -> None:
         "catalog_sha256": catalog.sha256,
         "parent_manifest_sha256": hashlib.sha256((data_dir / "splits" / FULL_MANIFEST_NAME).read_bytes()).hexdigest(),
         "native_resolution": True,
+        "image_columns": image_columns,
         "encoder": encoder_settings,
         "seed": SEED,
         "epochs": args.epochs,

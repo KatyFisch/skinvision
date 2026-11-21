@@ -93,6 +93,53 @@ accuracy rose from 62.8% to 70.0%. The refit correctly classified 0 of 7
 `MAL_OTH` lesions. These figures use development predictions, with the
 separate test set reserved for later evaluation.
 
+## Run the single-photo pipeline
+
+Train the router and nine-class head with one native clinical close-up per
+lesion. The evaluation reuses the existing clinical MEL-vs-NV specialist.
+
+```sh
+uv run --locked python -m classifiers.finetune_routed --clinical-only --catalog final_data.csv
+uv run --locked python -m classifiers.single_photo evaluate --routed-run experiments/routed-finetune-clinical/RUN_ID
+```
+
+Use the routed run ID printed by the training command. Pass `--specialist-run`
+to use a clinical MEL-vs-NV training run directly. Evaluation aims to route
+at least 99% of development melanomas to the specialist and flag at
+least 95% of them end to end. It locks both cutoffs from out-of-fold
+predictions, then averages the three fold models' scores on the existing
+20% labeled MILK10k holdout. It writes `model.json`, predictions, and metrics
+under `data/experiments/single-photo/`. The report counts where melanomas
+were missed and includes an 11-class confusion matrix. The 95% figure is a
+development target. Holdout scores use an ensemble and may reach a different
+operating point at the same cutoffs.
+
+Run `20261121T200623773355Z` flagged 89 of 90 melanomas on the 1,048-lesion
+holdout. The router sent all 90 onward and the specialist missed one. The
+pipeline also flagged 871 of 958 non-melanoma lesions, giving 9.1% melanoma
+specificity. Eleven-class accuracy was 14.9% and macro F1 was 0.057. The
+cutoffs were locked before scoring these clinic photos.
+
+Run the saved model locally with a curated example. The command reads one
+image, applies its EXIF orientation, and preserves the full frame. If the
+longest edge exceeds 600 pixels it scales the photo down proportionally.
+The model emits one research label from the selected branch.
+
+```sh
+uv run --locked python -m classifiers.single_photo predict --model data/experiments/single-photo/RUN_ID/model.json path/to/example.jpg
+```
+
+For a useful close-up, use even daylight, keep the whole lesion and a margin
+of surrounding skin in view, and tap the lesion to focus. Back up slightly
+if the camera cannot focus. Review the image for blur, glare, or shadow and
+use the original JPEG or PNG without filters or digital zoom. For a clinician,
+an overview of the body site and a close-up with a ruler beside the lesion
+can also help. [American Academy of Dermatology photo guide](https://www.aad.org/public/fad/digital-health/taking-pictures-skin)
+
+MILK10k close-ups are clinic photos. This run measures how the pipeline
+works on those photos. Independent evaluation on self-taken photos and
+clinical review are needed before using it for people's skin concerns.
+
 ## Compare frozen paired-image encoders
 
 From the repository root, run the comparison using the existing
