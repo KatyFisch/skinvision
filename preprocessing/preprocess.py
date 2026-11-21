@@ -61,6 +61,7 @@ milk_columns = [
     "dataset",
     "lesion_id",
     "image_id",
+    "image_type",
     "age",
     "sex",
     "skin_tone_class",
@@ -79,6 +80,8 @@ df_milk = df_milk[milk_columns]
 
 df_isic["age"] = df_isic["age_approximate"]
 df_isic["skin_tone_class"] = pd.NA
+df_isic["image_type"] = pd.NA
+df_isic["diagnosis_confirm_type"] = pd.NA
 
 df_isic["path"] = df_isic["image_id"].apply(lambda x: Path("ISIC-2017_Training_resizedImages") / f"{x}.jpg")
 
@@ -86,12 +89,14 @@ df_isic["path_segmentation"] = df_isic["image_id"].apply(lambda x: Path("ISIC-20
 
 df_isic = df_isic.rename(columns={"melanoma": "MEL"})
 df_isic["NV"] = ((df_isic["MEL"] == 0) & (df_isic["seborrheic_keratosis"] == 0)).astype(float)
-df_isic["diagnosis_confirm_type"] = pd.NA
 
-# Keep only MEL and NV diagnoses
+# Create other diagnoses
 for category in categories:
     if category not in ["MEL", "NV"]:
         df_isic[category] = 0
+
+# Keep only MEL and NV diagnoses
+df_isic = df_isic.loc[(df_isic["NV"] != 0) | (df_isic["MEL"] != 0)].copy()
 
 df_isic["dataset"] = "ISIC2017"
 df_isic["lesion_id"] = pd.NA
@@ -101,6 +106,7 @@ isic_columns = [
     "dataset",
     "lesion_id",
     "image_id",
+    "image_type",
     "age",
     "sex",
     "skin_tone_class",
@@ -118,6 +124,9 @@ df_isic = df_isic[isic_columns]
 # --------------------------------------------------
 
 df_final = pd.concat([df_milk, df_isic], ignore_index=True)
+
+# set unknown to NA
+df_final["age"] = df_final["age"].replace("unknown", pd.NA)
 
 # Save paths as strings
 df_final["path"] = df_final["path"].astype(str)
