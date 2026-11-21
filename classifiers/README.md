@@ -1,7 +1,7 @@
 # Paired MEL-vs-NV training
 
 From the repository root, run the comparison using the existing
-[MEL-vs-NV manifest](../data_prep/README.md).
+[MEL-vs-NV manifest](eval_split/README.md).
 
 ```sh
 uv run --locked python -m classifiers.train_mel_nv
@@ -54,6 +54,19 @@ sensitivity, preferring the earliest variant in a tie. Scores, training
 losses, and fold checkpoints are saved under
 `data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
 
+## Fine-tune on clinical photos only
+
+```sh
+uv run --locked python -m classifiers.finetune_mel_nv --clinical-only
+```
+
+This uses one clinical close-up per lesion and the same development folds,
+learning rates, and five-epoch recipe. After the last epoch, fit a fresh
+logistic-regression head on the fine-tuned features from that fold's training
+photos. The report compares frozen, fine-tuned, and refitted scores on the
+held-out development folds. Look for the `-resnet18-clinical-finetune` run in
+the experiments directory.
+
 ## Compare images with and without age
 
 ```sh
@@ -61,7 +74,7 @@ uv run --locked python -m classifiers.compare_age data/experiments/mel-nv/your-r
 ```
 
 Pass the path printed by the fine-tuning run. For each development fold, use the
-selected variant's encoder to extract paired features. Use `--variant fine_tuned`
+selected variant's encoder to extract the views used during training. Use `--variant fine_tuned`
 to compare the final checkpoint when another variant was selected. Fit two logistic
 regression heads on those same training features, one with age appended. Use
 the training-fold median for missing ages when fitting the age head. At
@@ -71,7 +84,7 @@ an `age-<run-id>/` subdirectory of the source run.
 
 ## Test whether ISIC 2017 training data help
 
-Generate the [ISIC 2017 split](../data_prep/README.md#isic-2017-mel-vs-nv-split)
+Generate the [ISIC 2017 split](eval_split/README.md#isic-2017-mel-vs-nv-split)
 first. Train both recipes with one dermoscopic photo per example.
 
 ```sh

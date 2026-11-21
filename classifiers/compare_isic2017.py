@@ -16,6 +16,7 @@ import torchvision
 from torch.utils.data import DataLoader
 
 from classifiers.encoders import CHECKPOINTS, build_encoder, load_checkpoint
+from classifiers.eval_split.split_isic2017 import MANIFEST as ISIC_MANIFEST
 from classifiers.finetune_mel_nv import (
     BLOCK_LR,
     ENCODER,
@@ -29,7 +30,6 @@ from classifiers.finetune_mel_nv import (
 )
 from classifiers.train_mel_nv import MANIFEST as MILK_MANIFEST
 from classifiers.train_mel_nv import fit_frozen_head, load_development, summarize, summarize_at_threshold
-from data_prep.split_isic2017 import MANIFEST as ISIC_MANIFEST
 
 SEED = 42
 BATCH_SIZE = 16

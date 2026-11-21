@@ -11,7 +11,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 
-from classifiers.encoders import CHECKPOINTS, build_encoder, encode_pairs, load_checkpoint
+from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, encode_pairs, load_checkpoint
 from classifiers.finetune_mel_nv import ENCODER, LesionImages, LesionResNet18, checkpoint_path, encode_images
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
@@ -27,8 +27,8 @@ def load_ages(data_dir: Path, development: pd.DataFrame) -> np.ndarray:
     return clinical_ages.loc[development.lesion_id].to_numpy(dtype=float)
 
 
-def encode_checkpoint(checkpoint: Path, pretrained: Path, batches: DataLoader, device: torch.device) -> np.ndarray:
-    model = LesionResNet18(build_encoder(ENCODER, pretrained, torch.device("cpu")))
+def encode_checkpoint(checkpoint: Path, pretrained: Path, batches: DataLoader, device: torch.device, views: int = 2) -> np.ndarray:
+    model = LesionResNet18(build_encoder(ENCODER, pretrained, torch.device("cpu")), views=views)
     model.load_state_dict(torch.load(checkpoint, map_location="cpu", weights_only=True))
     return encode_images(model.to(device), batches, device)
 
@@ -45,6 +45,7 @@ def main() -> None:
     run_dir = args.run_dir.expanduser().resolve()
     data_dir = args.data_dir.expanduser().resolve()
     settings = json.loads((run_dir / "metrics.json").read_text())
+    image_columns = settings.get("image_columns", IMAGE_COLUMNS)
     selected = args.variant or settings["selected_variant"]
     if selected not in settings["results"]:
         parser.error(f"Unknown variant {selected!r} for this run")
@@ -70,10 +71,10 @@ def main() -> None:
 
     frozen_features = None
     if selected == "frozen":
-        frozen_features, _, _ = encode_pairs(ENCODER, development, data_dir, device, batch_size)
+        frozen_features, _, _ = encode_pairs(ENCODER, development, data_dir, device, batch_size, image_columns=image_columns)
     else:
         pretrained = load_checkpoint(weights.url, checksum, data_dir)
-        batches = DataLoader(LesionImages(development, data_dir, weights.transforms()), batch_size=batch_size)
+        batches = DataLoader(LesionImages(development, data_dir, weights.transforms(), image_columns), batch_size=batch_size)
 
     print(f"Comparing age heads using {selected} embeddings on {device}", flush=True)
     for fold in fold_numbers:
@@ -82,7 +83,7 @@ def main() -> None:
         print(f"  Fold {fold}", flush=True)
         features = frozen_features
         if features is None:
-            features = encode_checkpoint(checkpoint_path(run_dir, fold, selected), pretrained, batches, device)
+            features = encode_checkpoint(checkpoint_path(run_dir, fold, selected), pretrained, batches, device, views=len(image_columns))
         images = fit_frozen_head(features[training], targets[training])
         scores["image_only"][validation] = images.predict_proba(features[validation])[:, 1]
 

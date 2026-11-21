@@ -5,7 +5,7 @@
 From the repo root, run this after extracting the training release into `data/`.
 
 ```sh
-uv run --locked python data_prep/create_splits.py
+uv run --locked python -m classifiers.eval_split.create_splits
 ```
 
 Pass `--data-dir /path/to/data` or set `MILK10K_DATA_DIR` to use a shared
@@ -29,12 +29,12 @@ version.
 
 ## ISIC 2017 MEL vs. NV split
 
-Use the resized JPEGs from the [ISIC 2017 setup](../README.md#preprocess-isic-2017-training-images)
+Use the resized JPEGs from the [ISIC 2017 setup](../../README.md#preprocess-isic-2017-training-images)
 and `data/ISIC-2017_Training_Part3_GroundTruth.csv` from
 [Task 3](https://challenge.isic-archive.com/landing/2017/44/).
 
 ```sh
-uv run --locked python -m data_prep.split_isic2017
+uv run --locked python -m classifiers.eval_split.split_isic2017
 ```
 
 Exclude seborrheic keratosis. Screen resized ISIC images against the MILK10k

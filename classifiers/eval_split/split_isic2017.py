@@ -12,7 +12,7 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from sklearn.model_selection import StratifiedGroupKFold
 
-from data_prep.create_splits import SEED, save_manifest
+from classifiers.eval_split.create_splits import SEED, save_manifest
 
 MANIFEST = "isic2017-mel-nv-v1.csv"
 OVERLAP = "isic2017-mel-nv-overlap-v1.csv"
@@ -112,7 +112,7 @@ def split_isic2017(data_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_dir = Path(__file__).resolve().parents[1] / "data"
+    default_dir = Path(__file__).resolve().parents[2] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
     data_dir = parser.parse_args().data_dir.expanduser().resolve()
     manifest, audit = split_isic2017(data_dir)
