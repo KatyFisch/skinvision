@@ -31,7 +31,7 @@ Runs record the catalog checksum. When comparing age or scoring checkpoints
 from a catalog-backed run, pass `--catalog` with the same CSV. Omit the flag
 to use the original manifest paths for runs made without a catalog.
 
-## Prepare the router and other-diagnosis classifier
+## Train the router and other-diagnosis classifier
 
 Generate the two [routed task manifests](eval_split/README.md#routed-milk10k-tasks)
 from the catalog and the frozen parent MILK10k split. Both use paired images
@@ -39,9 +39,20 @@ and inherit the specialist's fold and holdout assignments wherever they share
 lesions. Keep the original `diagnosis_code` alongside the model target for
 evaluating per-diagnosis errors.
 
+```sh
+uv run --locked python -m classifiers.train_routed --catalog final_data.csv
+```
+
+The baseline fits two logistic-regression heads on shared frozen ResNet-18
+features, one clinical and one dermoscopic image per lesion. It trains each
+head inside the development folds and writes the fitted heads, predictions,
+and metrics under `data/experiments/routed/`. Use `--data-dir` for shared data.
+
 - **Router.** Train on every MILK10k lesion. The positive class is `MEL_OR_NV`
-  (1), and the negative class is `OTHER` (0). Report how many melanomas and
-  nevi reach the specialist, and which other diagnoses are routed there.
+  (1), and the negative class is `OTHER` (0). Choose the exploratory cutoff
+  based on melanoma routing sensitivity on the development predictions
+  (95% by default). The report shows how many lesions of each diagnosis
+  reach the specialist.
 - **Other-diagnosis classifier.** Train on the true `OTHER` subset and predict
   its nine diagnosis codes. Compare to a BCC majority baseline. Report macro
   F1, per-class recall with counts, and a confusion matrix. Evaluate the
