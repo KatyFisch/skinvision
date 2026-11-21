@@ -1,4 +1,4 @@
-# MEL vs. NV data preparation
+# Lesion classifier data preparation
 
 ## MILK10k split
 
@@ -26,6 +26,31 @@ each retained lesion keeps its test assignment or validation fold. Exact image
 copies share a `group_id`. The source lacks patient IDs. Rerun with the same
 inputs and lockfile to reproduce the manifest. Changed assignments require a new
 version.
+
+## Routed MILK10k tasks
+
+From the repository root, regenerate the image catalog and export the full
+MILK10k split before preparing the routed tasks.
+
+```sh
+uv run --locked python preprocessing/preprocess.py
+uv run --locked python -m classifiers.eval_split.create_splits --include-full
+uv run --locked python -m classifiers.eval_split.prepare_routed_tasks
+```
+
+The full split is `splits/milk10k-v1.csv`. Its `train` label corresponds to
+`development` in the archived parent export. The holdout and three folds
+retain their original memberships. Preparation checks those assignments
+against `milk10k-mel-nv-v1.csv` and validates labels and image IDs for both
+views against the catalog. `--catalog final_data.csv` and `--data-dir` let you
+point to a specific export or shared dataset directory.
+
+The outputs are `splits/milk10k-router-v1.csv` (5,240 lesions) and
+`splits/milk10k-other-diagnoses-v1.csv` (4,044 lesions). Each has one row per
+lesion with both paths, the original diagnosis, `target_name`, numeric
+`target`, duplicate group, split, and validation fold. The nine-class targets
+are zero-based in diagnosis-code order. Keep these CSVs under ignored `data/`.
+Use `split=train` for development and preserve `split=test` for evaluation.
 
 ## ISIC 2017 MEL vs. NV split
 

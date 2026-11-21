@@ -11,6 +11,7 @@ import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
 
 MANIFEST_NAME = "milk10k-mel-nv-v1.csv"
+FULL_MANIFEST_NAME = "milk10k-v1.csv"
 TARGET_BY_DIAGNOSIS = {"NV": 0, "MEL": 1}
 SEED = 42
 SHUFFLES = 24
@@ -135,13 +136,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_dir = Path(__file__).resolve().parents[2] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
-    data_dir = parser.parse_args().data_dir.expanduser().resolve()
+    parser.add_argument("--include-full", action="store_true", help="Also export the parent split covering all 11 MILK10k diagnoses")
+    args = parser.parse_args()
+    data_dir = args.data_dir.expanduser().resolve()
 
     lesions = load_lesions(data_dir)
     lesions["group_id"] = duplicate_groups(lesions, data_dir)
-    manifest = filter_mel_nv(assign_splits(lesions))
+    assignments = assign_splits(lesions)
+    manifest = filter_mel_nv(assignments)
     path = data_dir / "splits" / MANIFEST_NAME
     save_manifest(manifest, path)
+    if args.include_full:
+        full_path = data_dir / "splits" / FULL_MANIFEST_NAME
+        save_manifest(assignments, full_path)
+        print(f"Full manifest: {full_path}")
 
     print(f"Manifest: {path}")
     print(pd.crosstab(manifest["diagnosis_code"], manifest["split"], margins=True).to_string())

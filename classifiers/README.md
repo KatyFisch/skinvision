@@ -1,8 +1,8 @@
-# MEL-vs-NV training
+# Lesion classifiers
 
 ## Use the preprocessed image catalog
 
-Pass `--catalog final_data.csv` to any command below to use the export from
+Pass `--catalog final_data.csv` to the classifier commands to use the export from
 `preprocessing/preprocess.py`. Use `--data-dir /path/to/data` for a shared
 dataset. Both the catalog filename and the image paths in it resolve relative
 to that directory. You can also pass an absolute catalog filename.
@@ -13,20 +13,39 @@ uv run --locked python -m classifiers.train_mel_nv --data-dir /path/to/data --ca
 
 The catalog needs one row per image with `dataset`, `image_id`, `lesion_id`,
 `image_type`, `path`, `age`, and either `diagnosis_code` or the `MEL` and `NV`
-flags. Use the dataset values `MILK10k` and `ISIC2017`. MILK10k needs one
-`clinical: close-up` and one `dermoscopic` image per lesion. ISIC 2017 rows use
-`dermoscopic` and can leave `lesion_id` empty. Age is optional per image and
-only used by the age comparison, which reads it from the clinical view.
+flags for MEL-vs-NV. The routed tasks need the original MILK10k diagnosis as
+`diagnosis_code` or as one of the 11 one-hot flags. Use the dataset values
+`MILK10k` and `ISIC2017`. MILK10k needs one `clinical: close-up` and one
+`dermoscopic` image per lesion. The loader treats ISIC 2017 rows with blank
+`image_type` as dermoscopic. Those rows can leave `lesion_id` empty. Age is
+optional per image and only used by the age comparison, which reads it from
+the clinical view.
 
 The frozen manifests still assign lesions and duplicate groups to folds and
 holdouts. The loader resolves catalog images for those assignments and checks
-that their identities and MEL/NV labels agree. ISIC rows outside the eligible
+that their identities and diagnosis labels agree. ISIC rows outside the eligible
 manifest, including seborrheic keratoses and suspected cross-dataset matches,
 stay outside the experiment.
 
 Runs record the catalog checksum. When comparing age or scoring checkpoints
 from a catalog-backed run, pass `--catalog` with the same CSV. Omit the flag
 to use the original manifest paths for runs made without a catalog.
+
+## Prepare the router and other-diagnosis classifier
+
+Generate the two [routed task manifests](eval_split/README.md#routed-milk10k-tasks)
+from the catalog and the frozen parent MILK10k split. Both use paired images
+and inherit the specialist's fold and holdout assignments wherever they share
+lesions. Keep the original `diagnosis_code` alongside the model target for
+evaluating per-diagnosis errors.
+
+- **Router.** Train on every MILK10k lesion. The positive class is `MEL_OR_NV`
+  (1), and the negative class is `OTHER` (0). Report how many melanomas and
+  nevi reach the specialist, and which other diagnoses are routed there.
+- **Other-diagnosis classifier.** Train on the true `OTHER` subset and predict
+  its nine diagnosis codes. Compare to a BCC majority baseline. Report macro
+  F1, per-class recall with counts, and a confusion matrix. Evaluate the
+  complete routing pipeline separately using the same held-out lesions.
 
 ## Compare frozen paired-image encoders
 

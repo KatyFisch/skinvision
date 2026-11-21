@@ -8,6 +8,8 @@ from pathlib import Path
 import pandas as pd
 
 MILK_VIEWS = {"clinical: close-up": "clinical_path", "dermoscopic": "dermoscopic_path"}
+MILK_DIAGNOSES = ("AKIEC", "BCC", "BEN_OTH", "BKL", "DF", "INF", "MAL_OTH", "MEL", "NV", "SCCKA", "VASC")
+MEL_NV_DIAGNOSES = {1: "MEL", 0: "NV"}
 CATALOG_COLUMNS = {"dataset", "lesion_id", "image_id", "image_type", "path", "age"}
 
 
@@ -17,13 +19,18 @@ class ImageCatalog:
     data_dir: Path
     sha256: str
 
-    def _image_paths(self, images: pd.DataFrame, targets: pd.Series, description: str) -> list[str]:
-        melanoma = targets.to_numpy()
-        valid = images["MEL"].eq(melanoma) & images["NV"].eq(1 - melanoma)
+    def _image_paths(self, images: pd.DataFrame, diagnoses: pd.Series, description: str) -> list[str]:
+        expected = diagnoses.fillna("").to_numpy(dtype=str)
+        valid = pd.Series(diagnoses.isin(MILK_DIAGNOSES).to_numpy(), index=images.index)
+        flags = [code for code in MILK_DIAGNOSES if code in images]
         if "diagnosis_code" in images:
-            valid &= images["diagnosis_code"].eq(targets.map({1: "MEL", 0: "NV"}).to_numpy())
+            valid &= images["diagnosis_code"].eq(expected)
+        else:
+            valid &= diagnoses.isin(flags).to_numpy()
+        for code in flags:
+            valid &= images[code].eq(expected == code)
         if not valid.fillna(False).all():
-            raise ValueError(f"Catalog MEL/NV labels disagree with the frozen manifest for {description}")
+            raise ValueError(f"Catalog labels disagree with the frozen manifest for {description}")
         paths = images["path"].tolist()
         for path in paths:
             relative = Path(path)
@@ -36,6 +43,7 @@ class ImageCatalog:
         if len(images) != len(MILK_VIEWS) * len(lesions):
             raise ValueError("Expected one clinical and one dermoscopic catalog row per MILK10k lesion in the frozen manifest")
         result = lesions.copy()
+        diagnoses = lesions["diagnosis_code"] if "diagnosis_code" in lesions else lesions["target"].map(MEL_NV_DIAGNOSES)
         for modality, column in MILK_VIEWS.items():
             view = images.loc[images["image_type"].eq(modality)].set_index("lesion_id")
             if not view.index.is_unique:
@@ -44,7 +52,7 @@ class ImageCatalog:
             expected_ids = lesions[column].map(lambda path: Path(path).stem)
             if not view["image_id"].eq(expected_ids.to_numpy()).fillna(False).all():
                 raise ValueError(f"Catalog MILK10k {modality} image IDs disagree with the frozen manifest")
-            result[column] = self._image_paths(view, lesions["target"], f"MILK10k {modality} images")
+            result[column] = self._image_paths(view, diagnoses, f"MILK10k {modality} images")
             if column == "clinical_path":
                 result["age"] = view["age"].to_numpy()
         return result
@@ -53,7 +61,7 @@ class ImageCatalog:
         images = self.rows.loc[self.rows["dataset"].eq("ISIC2017")].set_index("image_id").reindex(manifest["image_id"])
         if not images["image_type"].eq("dermoscopic").fillna(False).all():
             raise ValueError("Expected one dermoscopic catalog row per ISIC image in the frozen manifest")
-        return manifest.assign(image_path=self._image_paths(images, manifest["target"], "ISIC 2017 images"))
+        return manifest.assign(image_path=self._image_paths(images, manifest["target"].map(MEL_NV_DIAGNOSES), "ISIC 2017 images"))
 
 
 def load_catalog(path: Path | None, data_dir: Path, *, expected_sha256: str | None = None) -> ImageCatalog | None:
@@ -74,7 +82,10 @@ def load_catalog(path: Path | None, data_dir: Path, *, expected_sha256: str | No
     if not {"MEL", "NV"}.issubset(rows.columns):
         if "diagnosis_code" not in rows:
             raise ValueError("Expected MEL and NV flags or a diagnosis_code in the image catalog")
-        rows = rows.assign(MEL=rows["diagnosis_code"].eq("MEL"), NV=rows["diagnosis_code"].eq("NV"))
+        for code in {"MEL", "NV"}.difference(rows.columns):
+            rows[code] = rows["diagnosis_code"].eq(code)
+    isic_without_modality = rows["dataset"].eq("ISIC2017") & rows["image_type"].isna()
+    rows.loc[isic_without_modality, "image_type"] = "dermoscopic"
     if rows[["dataset", "image_id", "path"]].isna().to_numpy().any() or rows.duplicated(["dataset", "image_id"]).any():
         raise ValueError("Expected complete catalog paths and unique image IDs within each dataset")
     if not rows["path"].is_unique:
