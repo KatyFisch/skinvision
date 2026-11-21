@@ -55,6 +55,10 @@ def summarize(targets: np.ndarray, scores: np.ndarray, sensitivity_target: float
     _, sensitivity, thresholds = roc_curve(targets, scores, drop_intermediate=False)
     first_match = np.flatnonzero(sensitivity >= sensitivity_target)[0]
     threshold = float(thresholds[first_match])
+    return summarize_at_threshold(targets, scores, threshold)
+
+
+def summarize_at_threshold(targets: np.ndarray, scores: np.ndarray, threshold: float) -> dict[str, float | int]:
     tn, fp, fn, tp = confusion_matrix(targets, scores >= threshold, labels=[0, 1]).ravel()
     return {
         "roc_auc": float(roc_auc_score(targets, scores)),

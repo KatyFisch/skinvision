@@ -68,3 +68,31 @@ the training-fold median for missing ages when fitting the age head. At
 prediction time, use the image-only score when age is missing. The report
 includes per-fold results and missed melanoma counts by age group. It lives in
 an `age-<run-id>/` subdirectory of the source run.
+
+## Test whether ISIC 2017 training data help
+
+Generate the [ISIC 2017 split](../data_prep/README.md#isic-2017-mel-vs-nv-split)
+first. Train both recipes with one dermoscopic photo per example.
+
+```sh
+uv run --locked python -m classifiers.compare_isic2017
+```
+
+For each MILK10k development fold, train on the other two folds, then repeat
+with the ISIC 2017 training split added. Both recipes use the same ResNet-18
+setup, five epochs of last-block fine-tuning, and a logistic head refit on the
+resulting embeddings. An epoch covers the whole training set, so the combined
+recipe takes more optimizer steps. Both recipes use image features alone.
+
+The run reports out-of-fold MILK10k development scores. For ISIC 2017, average
+the three fold models and choose a development cutoff per recipe at 95%
+sensitivity on the ISIC validation split. Use the saved checkpoints and cutoffs
+to score the ISIC test split in a separate command. Pass the run directory
+printed by training.
+
+```sh
+uv run --locked python -m classifiers.compare_isic2017 --test-run data/experiments/mel-nv/your-run-id-isic2017-dermoscopy
+```
+
+The run keeps validation and test reports under `data/experiments/mel-nv/`.
+The MILK10k test split remains reserved for the selected paired model.

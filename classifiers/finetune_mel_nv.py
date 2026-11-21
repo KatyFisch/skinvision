@@ -22,11 +22,20 @@ from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, enco
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
 ENCODER = "resnet18"
+EPOCHS = 5
+HEAD_LR = 1e-3
+BLOCK_LR = 1e-4
 
 
-class LesionPairs(Dataset):
-    def __init__(self, rows: pd.DataFrame, data_dir: Path, preprocess: Callable[[Image.Image], torch.Tensor]):
-        self.paths = rows[IMAGE_COLUMNS].to_numpy()
+class LesionImages(Dataset):
+    def __init__(
+        self,
+        rows: pd.DataFrame,
+        data_dir: Path,
+        preprocess: Callable[[Image.Image], torch.Tensor],
+        image_columns: list[str] = IMAGE_COLUMNS,
+    ):
+        self.paths = rows[image_columns].to_numpy()
         self.targets = rows["target"].to_numpy(dtype=np.float32)
         self.data_dir = data_dir
         self.preprocess = preprocess
@@ -34,25 +43,22 @@ class LesionPairs(Dataset):
     def __len__(self) -> int:
         return len(self.targets)
 
-    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor, np.float32]:
-        clinical, dermoscopy = self.paths[index]
-        return (
-            load_image(self.data_dir / clinical, self.preprocess),
-            load_image(self.data_dir / dermoscopy, self.preprocess),
-            self.targets[index],
-        )
+    def __getitem__(self, index: int) -> tuple:
+        views = tuple(load_image(self.data_dir / path, self.preprocess) for path in self.paths[index])
+        return (*views, self.targets[index])
 
 
-class PairedResNet18(nn.Module):
+class LesionResNet18(nn.Module):
     mean: torch.Tensor
     scale: torch.Tensor
 
-    def __init__(self, encoder: nn.Module):
+    def __init__(self, encoder: nn.Module, views: int = 2):
         super().__init__()
         self.encoder = encoder
-        self.head = nn.Linear(1024, 1)
-        self.register_buffer("mean", torch.zeros(1024))
-        self.register_buffer("scale", torch.ones(1024))
+        feature_size = views * 512
+        self.head = nn.Linear(feature_size, 1)
+        self.register_buffer("mean", torch.zeros(feature_size))
+        self.register_buffer("scale", torch.ones(feature_size))
 
     @torch.no_grad()
     def load_frozen_head(self, fitted: Pipeline) -> None:
@@ -66,16 +72,16 @@ class PairedResNet18(nn.Module):
     def logits_from_embeddings(self, embeddings: torch.Tensor) -> torch.Tensor:
         return self.head((embeddings - self.mean) / self.scale).squeeze(-1)
 
-    def embeddings(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> torch.Tensor:
-        views = self.encoder(torch.cat((clinical, dermoscopy), dim=0)).chunk(2, dim=0)
-        return torch.cat(views, dim=1)
+    def embeddings(self, *views: torch.Tensor) -> torch.Tensor:
+        encoded = self.encoder(torch.cat(views, dim=0)).chunk(len(views), dim=0)
+        return torch.cat(encoded, dim=1)
 
-    def forward(self, clinical: torch.Tensor, dermoscopy: torch.Tensor) -> torch.Tensor:
-        return self.logits_from_embeddings(self.embeddings(clinical, dermoscopy))
+    def forward(self, *views: torch.Tensor) -> torch.Tensor:
+        return self.logits_from_embeddings(self.embeddings(*views))
 
 
 def train_last_block(
-    model: PairedResNet18, batches: DataLoader, device: torch.device, epochs: int, head_lr: float, block_lr: float
+    model: LesionResNet18, batches: DataLoader, device: torch.device, epochs: int, head_lr: float, block_lr: float
 ) -> Iterator[float]:
     last_block = model.encoder.get_submodule("layer4").requires_grad_(True)
     optimizer = torch.optim.AdamW([{"params": model.head.parameters(), "lr": head_lr}, {"params": last_block.parameters(), "lr": block_lr}])
@@ -86,9 +92,9 @@ def train_last_block(
         model.encoder.eval()
         loss_sum = 0.0
         samples = 0
-        for clinical, dermoscopy, targets in batches:
+        for *views, targets in batches:
             optimizer.zero_grad(set_to_none=True)
-            logits = model(clinical.to(device), dermoscopy.to(device))
+            logits = model(*(view.to(device) for view in views))
             loss = criterion(logits, targets.to(device))
             loss.backward()
             optimizer.step()
@@ -102,10 +108,16 @@ def train_last_block(
 
 
 @torch.inference_mode()
-def predict(model: PairedResNet18, batches: DataLoader, device: torch.device) -> np.ndarray:
+def predict(model: LesionResNet18, batches: DataLoader, device: torch.device) -> np.ndarray:
     model.eval()
-    scores = [model(clinical.to(device), dermoscopy.to(device)).sigmoid().cpu().numpy() for clinical, dermoscopy, _ in batches]
+    scores = [model(*(view.to(device) for view in views)).sigmoid().cpu().numpy() for *views, _ in batches]
     return np.concatenate(scores)
+
+
+@torch.inference_mode()
+def encode_images(model: LesionResNet18, batches: DataLoader, device: torch.device) -> np.ndarray:
+    model.eval()
+    return np.concatenate([model.embeddings(*(view.to(device) for view in views)).cpu().numpy() for *views, _ in batches])
 
 
 def checkpoint_path(run_dir: Path, fold: int, variant: str) -> Path:
@@ -119,9 +131,9 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_data_dir)))
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     parser.add_argument("--batch-size", type=int, default=16, help="Lesion pairs per batch")
-    parser.add_argument("--epochs", type=int, default=5, help="Fixed number of epochs for pass 2")
-    parser.add_argument("--head-lr", type=float, default=1e-3, help="Pass 2 learning rate for the classifier head")
-    parser.add_argument("--block-lr", type=float, default=1e-4, help="Pass 2 learning rate for ResNet's last block")
+    parser.add_argument("--epochs", type=int, default=EPOCHS, help="Fixed number of epochs for pass 2")
+    parser.add_argument("--head-lr", type=float, default=HEAD_LR, help="Pass 2 learning rate for the classifier head")
+    parser.add_argument("--block-lr", type=float, default=BLOCK_LR, help="Pass 2 learning rate for ResNet's last block")
     parser.add_argument("--sensitivity-target", type=float, default=0.95)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
@@ -159,12 +171,12 @@ def main() -> None:
         print(f"Fold {fold}, pass 1: fitting logistic regression on frozen embeddings", flush=True)
         head = fit_frozen_head(features[training], targets[training])
         scores_by_variant["frozen"][validation] = head.predict_proba(features[validation])[:, 1]
-        model = PairedResNet18(build_encoder(ENCODER, checkpoint, device))
+        model = LesionResNet18(build_encoder(ENCODER, checkpoint, device))
         model.load_frozen_head(head)
         model.to(device)
 
-        train_pairs = LesionPairs(development.loc[training], data_dir, preprocess)
-        validation_pairs = LesionPairs(development.loc[validation], data_dir, preprocess)
+        train_pairs = LesionImages(development.loc[training], data_dir, preprocess)
+        validation_pairs = LesionImages(development.loc[validation], data_dir, preprocess)
         generator = torch.Generator().manual_seed(args.seed + fold)
         train_batches = DataLoader(train_pairs, batch_size=args.batch_size, shuffle=True, generator=generator)
         validation_batches = DataLoader(validation_pairs, batch_size=args.batch_size)

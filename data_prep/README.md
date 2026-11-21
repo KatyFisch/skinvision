@@ -1,4 +1,6 @@
-# MILK10k MEL vs. NV dataset
+# MEL vs. NV data preparation
+
+## MILK10k split
 
 From the repo root, run this after extracting the training release into `data/`.
 
@@ -24,3 +26,24 @@ each retained lesion keeps its test assignment or validation fold. Exact image
 copies share a `group_id`. The source lacks patient IDs. Rerun with the same
 inputs and lockfile to reproduce the manifest. Changed assignments require a new
 version.
+
+## ISIC 2017 MEL vs. NV split
+
+Use the resized JPEGs from the [ISIC 2017 setup](../README.md#preprocess-isic-2017-training-images)
+and `data/ISIC-2017_Training_Part3_GroundTruth.csv` from
+[Task 3](https://challenge.isic-archive.com/landing/2017/44/).
+
+```sh
+uv run --locked python -m data_prep.split_isic2017
+```
+
+Exclude seborrheic keratosis. Screen resized ISIC images against the MILK10k
+dermoscopy images using perceptual hashes and pixel agreement on two central
+thumbnail crops, checking rotations and reflections. Exclude suspected
+cross-source matches and keep suspected repeats within ISIC together. The
+screen can miss different photos of the same lesion. Patient IDs are unavailable.
+
+The seed-42, diagnosis-stratified split assigns about 60% / 20% / 20% to train,
+validation, and test. It subdivides the 2017 challenge's training release. Outputs
+are `splits/isic2017-mel-nv-v1.csv` and `splits/isic2017-mel-nv-overlap-v1.csv`
+under `data/`. Rerunning with the same inputs reproduces those files.

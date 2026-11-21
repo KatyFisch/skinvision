@@ -12,7 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from classifiers.encoders import CHECKPOINTS, build_encoder, encode_pairs, load_checkpoint
-from classifiers.finetune_mel_nv import ENCODER, LesionPairs, PairedResNet18, checkpoint_path
+from classifiers.finetune_mel_nv import ENCODER, LesionImages, LesionResNet18, checkpoint_path, encode_images
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
 METADATA_FILE = "MILK10k_Training_Metadata.csv"
@@ -27,14 +27,10 @@ def load_ages(data_dir: Path, development: pd.DataFrame) -> np.ndarray:
     return clinical_ages.loc[development.lesion_id].to_numpy(dtype=float)
 
 
-@torch.inference_mode()
 def encode_checkpoint(checkpoint: Path, pretrained: Path, batches: DataLoader, device: torch.device) -> np.ndarray:
-    model = PairedResNet18(build_encoder(ENCODER, pretrained, torch.device("cpu")))
+    model = LesionResNet18(build_encoder(ENCODER, pretrained, torch.device("cpu")))
     model.load_state_dict(torch.load(checkpoint, map_location="cpu", weights_only=True))
-    model.to(device).eval()
-    return np.concatenate(
-        [model.embeddings(clinical.to(device), dermoscopy.to(device)).cpu().numpy() for clinical, dermoscopy, _ in batches]
-    )
+    return encode_images(model.to(device), batches, device)
 
 
 def main() -> None:
@@ -77,7 +73,7 @@ def main() -> None:
         frozen_features, _, _ = encode_pairs(ENCODER, development, data_dir, device, batch_size)
     else:
         pretrained = load_checkpoint(weights.url, checksum, data_dir)
-        batches = DataLoader(LesionPairs(development, data_dir, weights.transforms()), batch_size=batch_size)
+        batches = DataLoader(LesionImages(development, data_dir, weights.transforms()), batch_size=batch_size)
 
     print(f"Comparing age heads using {selected} embeddings on {device}", flush=True)
     for fold in fold_numbers:
