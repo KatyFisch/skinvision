@@ -1,0 +1,9 @@
+import sys
+
+from jupyterlab.labapp import LabApp
+
+
+def main() -> None:
+    LabApp.launch_instance(
+        argv=["--ServerApp.root_dir=.", "notebooks/segmentation.ipynb", *sys.argv[1:]]
+    )
