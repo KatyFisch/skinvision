@@ -1,7 +1,37 @@
-# Paired MEL-vs-NV training
+# MEL-vs-NV training
+
+## Use the preprocessed image catalog
+
+Pass `--catalog final_data.csv` to any command below to use the export from
+`preprocessing/preprocess.py`. Use `--data-dir /path/to/data` for a shared
+dataset. Both the catalog filename and the image paths in it resolve relative
+to that directory. You can also pass an absolute catalog filename.
+
+```sh
+uv run --locked python -m classifiers.train_mel_nv --data-dir /path/to/data --catalog final_data.csv
+```
+
+The catalog needs one row per image with `dataset`, `image_id`, `lesion_id`,
+`image_type`, `path`, `age`, and either `diagnosis_code` or the `MEL` and `NV`
+flags. Use the dataset values `MILK10k` and `ISIC2017`. MILK10k needs one
+`clinical: close-up` and one `dermoscopic` image per lesion. ISIC 2017 rows use
+`dermoscopic` and can leave `lesion_id` empty. Age is optional per image and
+only used by the age comparison, which reads it from the clinical view.
+
+The frozen manifests still assign lesions and duplicate groups to folds and
+holdouts. The loader resolves catalog images for those assignments and checks
+that their identities and MEL/NV labels agree. ISIC rows outside the eligible
+manifest, including seborrheic keratoses and suspected cross-dataset matches,
+stay outside the experiment.
+
+Runs record the catalog checksum. When comparing age or scoring checkpoints
+from a catalog-backed run, pass `--catalog` with the same CSV. Omit the flag
+to use the original manifest paths for runs made without a catalog.
+
+## Compare frozen paired-image encoders
 
 From the repository root, run the comparison using the existing
-[MEL-vs-NV manifest](../data_prep/README.md).
+[MEL-vs-NV manifest](eval_split/README.md).
 
 ```sh
 uv run --locked python -m classifiers.train_mel_nv
@@ -54,6 +84,19 @@ sensitivity, preferring the earliest variant in a tie. Scores, training
 losses, and fold checkpoints are saved under
 `data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
 
+## Fine-tune on clinical photos only
+
+```sh
+uv run --locked python -m classifiers.finetune_mel_nv --clinical-only
+```
+
+This uses one clinical close-up per lesion and the same development folds,
+learning rates, and five-epoch recipe. After the last epoch, fit a fresh
+logistic-regression head on the fine-tuned features from that fold's training
+photos. The report compares frozen, fine-tuned, and refitted scores on the
+held-out development folds. Look for the `-resnet18-clinical-finetune` run in
+the experiments directory.
+
 ## Compare images with and without age
 
 ```sh
@@ -61,7 +104,7 @@ uv run --locked python -m classifiers.compare_age data/experiments/mel-nv/your-r
 ```
 
 Pass the path printed by the fine-tuning run. For each development fold, use the
-selected variant's encoder to extract paired features. Use `--variant fine_tuned`
+selected variant's encoder to extract the views used during training. Use `--variant fine_tuned`
 to compare the final checkpoint when another variant was selected. Fit two logistic
 regression heads on those same training features, one with age appended. Use
 the training-fold median for missing ages when fitting the age head. At
@@ -71,7 +114,7 @@ an `age-<run-id>/` subdirectory of the source run.
 
 ## Test whether ISIC 2017 training data help
 
-Generate the [ISIC 2017 split](../data_prep/README.md#isic-2017-mel-vs-nv-split)
+Generate the [ISIC 2017 split](eval_split/README.md#isic-2017-mel-vs-nv-split)
 first. Train both recipes with one dermoscopic photo per example.
 
 ```sh

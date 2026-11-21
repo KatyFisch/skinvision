@@ -66,7 +66,7 @@ analysis, label mapping, and known limits on splitting and evaluation.
 
 ## 2. Use one split across all three classifiers
 
-- Use the [MEL-vs-NV manifest](data_prep/README.md) for the specialist. For the
+- Use the [MEL-vs-NV manifest](classifiers/eval_split/README.md) for the specialist. For the
   router and the all-diagnosis classifier, use the parent MILK10k assignments in
   the local `data/splits/archive/milk10k-v1.csv`. The 20% holdout and three
   development folds stay fixed across all three tasks. Restore the full-manifest

@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
@@ -53,9 +53,11 @@ def build_encoder(name: str, checkpoint: Path, device: torch.device) -> nn.Modul
     return model.eval().requires_grad_(False).to(device)
 
 
-def feature_cache_path(pairs: pd.DataFrame, data_dir: Path, name: str, settings: dict[str, str]) -> Path:
+def feature_cache_path(
+    pairs: pd.DataFrame, data_dir: Path, name: str, settings: dict[str, str], *, image_columns: Sequence[str] = IMAGE_COLUMNS
+) -> Path:
     digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
-    for column in IMAGE_COLUMNS:
+    for column in image_columns:
         for relative_path in pairs[column]:
             image_stat = (data_dir / relative_path).stat()
             digest.update(f"{relative_path}\0{image_stat.st_size}\0{image_stat.st_mtime_ns}\n".encode())
@@ -63,8 +65,9 @@ def feature_cache_path(pairs: pd.DataFrame, data_dir: Path, name: str, settings:
 
 
 def encode_pairs(
-    name: str, pairs: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int
+    name: str, pairs: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int, *, image_columns: Sequence[str] = IMAGE_COLUMNS
 ) -> tuple[np.ndarray, dict[str, str], bool]:
+    """Extract and concatenate the selected image views per lesion."""
     weights, sha256 = CHECKPOINTS[name]
     checkpoint = load_checkpoint(weights.url, sha256, data_dir)
     preprocess = weights.transforms()
@@ -78,7 +81,9 @@ def encode_pairs(
         "device": str(device),
         "feature_cache_version": str(FEATURE_CACHE_VERSION),
     }
-    cache_path = feature_cache_path(pairs, data_dir, name, settings)
+    if tuple(image_columns) != tuple(IMAGE_COLUMNS):
+        settings["image_columns"] = ",".join(image_columns)
+    cache_path = feature_cache_path(pairs, data_dir, name, settings, image_columns=image_columns)
     if cache_path.is_file():
         return np.load(cache_path, allow_pickle=False), settings, True
 
@@ -87,12 +92,11 @@ def encode_pairs(
     with torch.inference_mode():
         for start in range(0, len(pairs), batch_size):
             batch = pairs.iloc[start : start + batch_size]
-            images = [load_image(data_dir / relative_path, preprocess) for column in IMAGE_COLUMNS for relative_path in batch[column]]
+            images = [load_image(data_dir / relative_path, preprocess) for column in image_columns for relative_path in batch[column]]
             embeddings = encoder(torch.stack(images).to(device)).cpu().numpy()
-            clinical, dermoscopic = np.split(embeddings, 2)
-            feature_batches.append(np.concatenate((clinical, dermoscopic), axis=1))
+            feature_batches.append(np.concatenate(np.split(embeddings, len(image_columns)), axis=1))
             if start == 0 or (start // batch_size + 1) % 10 == 0 or start + batch_size >= len(pairs):
-                print(f"{name}: encoded {min(start + batch_size, len(pairs))}/{len(pairs)} pairs", flush=True)
+                print(f"{name}: encoded {min(start + batch_size, len(pairs))}/{len(pairs)} lesions", flush=True)
 
     features = np.concatenate(feature_batches)
     cache_path.parent.mkdir(parents=True, exist_ok=True)

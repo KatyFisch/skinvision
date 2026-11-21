@@ -1,4 +1,4 @@
-"""Fit a paired ResNet-18 head, then fine-tune it with ResNet's last block."""
+"""Fine-tune ResNet-18 on paired images or one clinical close-up per lesion."""
 
 import argparse
 import json
@@ -18,6 +18,7 @@ from sklearn.pipeline import Pipeline
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+from classifiers.catalog import load_catalog
 from classifiers.encoders import CHECKPOINTS, IMAGE_COLUMNS, build_encoder, encode_pairs, load_checkpoint, load_image
 from classifiers.train_mel_nv import MANIFEST, fit_frozen_head, load_development, summarize
 
@@ -129,8 +130,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_data_dir = Path(__file__).resolve().parents[1] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_data_dir)))
+    parser.add_argument("--catalog", type=Path, help="Image catalog CSV, relative to --data-dir or absolute")
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
-    parser.add_argument("--batch-size", type=int, default=16, help="Lesion pairs per batch")
+    parser.add_argument("--clinical-only", action="store_true", help="Use only the clinical view and refit the head after the final epoch")
+    parser.add_argument("--batch-size", type=int, default=16, help="Lesions per batch")
     parser.add_argument("--epochs", type=int, default=EPOCHS, help="Fixed number of epochs for pass 2")
     parser.add_argument("--head-lr", type=float, default=HEAD_LR, help="Pass 2 learning rate for the classifier head")
     parser.add_argument("--block-lr", type=float, default=BLOCK_LR, help="Pass 2 learning rate for ResNet's last block")
@@ -148,22 +151,28 @@ def main() -> None:
     torch.manual_seed(args.seed)
     start = perf_counter()
 
-    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST)
+    catalog = load_catalog(args.catalog, data_dir)
+    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST, catalog)
     targets = development["target"].to_numpy(dtype=int)
     folds = development["validation_fold"].to_numpy(dtype=int)
-    features, encoder_settings, cache_hit = encode_pairs(ENCODER, development, data_dir, device, args.batch_size)
+    image_columns = ["clinical_path"] if args.clinical_only else IMAGE_COLUMNS
+    features, encoder_settings, cache_hit = encode_pairs(
+        ENCODER, development, data_dir, device, args.batch_size, image_columns=image_columns
+    )
     weights, checksum = CHECKPOINTS[ENCODER]
     checkpoint = load_checkpoint(weights.url, checksum, data_dir)
     preprocess = weights.transforms()
     print(f"Training on development folds of {len(development)} lesions using {device}", flush=True)
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    output_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-resnet18-finetune"
+    run_suffix = "resnet18-clinical-finetune" if args.clinical_only else "resnet18-finetune"
+    output_dir = data_dir / "experiments" / "mel-nv" / f"{run_id}-{run_suffix}"
     output_dir.mkdir(parents=True)
-    epoch_variants = {
-        epoch: "fine_tuned" if epoch == args.epochs else f"epoch_{epoch}" for epoch in (1, 2, args.epochs) if epoch <= args.epochs
-    }
+    epoch_variants = {epoch: f"epoch_{epoch}" for epoch in (1, 2) if epoch < args.epochs and not args.clinical_only}
+    epoch_variants[args.epochs] = "fine_tuned"
     scores_by_variant = {name: np.empty(len(development)) for name in ("frozen", *epoch_variants.values())}
+    if args.clinical_only:
+        scores_by_variant["refit"] = np.empty(len(development))
     fold_losses = {}
     for fold in sorted(set(folds.tolist())):
         validation = folds == fold
@@ -171,15 +180,15 @@ def main() -> None:
         print(f"Fold {fold}, pass 1: fitting logistic regression on frozen embeddings", flush=True)
         head = fit_frozen_head(features[training], targets[training])
         scores_by_variant["frozen"][validation] = head.predict_proba(features[validation])[:, 1]
-        model = LesionResNet18(build_encoder(ENCODER, checkpoint, device))
+        model = LesionResNet18(build_encoder(ENCODER, checkpoint, device), views=len(image_columns))
         model.load_frozen_head(head)
         model.to(device)
 
-        train_pairs = LesionImages(development.loc[training], data_dir, preprocess)
-        validation_pairs = LesionImages(development.loc[validation], data_dir, preprocess)
+        train_images = LesionImages(development.loc[training], data_dir, preprocess, image_columns)
+        validation_images = LesionImages(development.loc[validation], data_dir, preprocess, image_columns)
         generator = torch.Generator().manual_seed(args.seed + fold)
-        train_batches = DataLoader(train_pairs, batch_size=args.batch_size, shuffle=True, generator=generator)
-        validation_batches = DataLoader(validation_pairs, batch_size=args.batch_size)
+        train_batches = DataLoader(train_images, batch_size=args.batch_size, shuffle=True, generator=generator)
+        validation_batches = DataLoader(validation_images, batch_size=args.batch_size)
         fold_losses[fold] = []
         for epoch, loss in enumerate(train_last_block(model, train_batches, device, args.epochs, args.head_lr, args.block_lr), start=1):
             fold_losses[fold].append(loss)
@@ -187,6 +196,12 @@ def main() -> None:
                 variant = epoch_variants[epoch]
                 scores_by_variant[variant][validation] = predict(model, validation_batches, device)
                 torch.save({name: value.cpu() for name, value in model.state_dict().items()}, checkpoint_path(output_dir, fold, variant))
+        if args.clinical_only:
+            print(f"Fold {fold}, refitting logistic regression on the fine-tuned features", flush=True)
+            training_features = encode_images(model, DataLoader(train_images, batch_size=args.batch_size), device)
+            model.load_frozen_head(fit_frozen_head(training_features, targets[training]))
+            scores_by_variant["refit"][validation] = predict(model, validation_batches, device)
+            torch.save({name: value.cpu() for name, value in model.state_dict().items()}, checkpoint_path(output_dir, fold, "refit"))
 
     predictions = development[["lesion_id", "diagnosis_code", "target", "validation_fold"]].copy()
     summaries = {name: summarize(targets, scores, args.sensitivity_target) for name, scores in scores_by_variant.items()}
@@ -209,6 +224,7 @@ def main() -> None:
     settings = {
         "manifest": MANIFEST,
         "manifest_sha256": manifest_hash,
+        "image_columns": image_columns,
         "encoder": encoder_settings,
         "feature_cache_hit": cache_hit,
         "scikit_learn": sklearn.__version__,
@@ -216,7 +232,7 @@ def main() -> None:
         "batch_size_pairs": args.batch_size,
         "exploratory_sensitivity_target": args.sensitivity_target,
         "selected_variant": selected_variant,
-        "pass_1": "StandardScaler and LogisticRegression(C=1.0, max_iter=2000) on frozen paired features",
+        "pass_1": "StandardScaler and LogisticRegression(C=1.0, max_iter=2000) on frozen features",
         "pass_2": {
             "trainable": ["head", "encoder.layer4"],
             "batch_norm_running_statistics": "frozen",
@@ -230,6 +246,10 @@ def main() -> None:
         "elapsed_seconds": perf_counter() - start,
         "results": results,
     }
+    if args.clinical_only:
+        settings["refit"] = "StandardScaler and LogisticRegression(C=1.0, max_iter=2000) on final fine-tuned training features"
+    if catalog is not None:
+        settings["catalog_sha256"] = catalog.sha256
     (output_dir / "metrics.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     print(f"Results: {output_dir}")
 

@@ -133,7 +133,7 @@ def save_manifest(manifest: pd.DataFrame, path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    default_dir = Path(__file__).resolve().parents[1] / "data"
+    default_dir = Path(__file__).resolve().parents[2] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_dir)))
     data_dir = parser.parse_args().data_dir.expanduser().resolve()
 

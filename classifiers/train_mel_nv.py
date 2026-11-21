@@ -18,23 +18,29 @@ from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from classifiers.catalog import ImageCatalog, load_catalog
 from classifiers.encoders import CHECKPOINTS, encode_pairs
 
 MANIFEST = "milk10k-mel-nv-v1.csv"
 TARGET_BY_DIAGNOSIS = {"NV": 0, "MEL": 1}
 
 
-def load_development(manifest_path: Path) -> tuple[pd.DataFrame, str]:
+def load_development(manifest_path: Path, catalog: ImageCatalog | None = None) -> tuple[pd.DataFrame, str]:
     content = manifest_path.read_bytes()
     manifest = pd.read_csv(BytesIO(content), dtype={"validation_fold": "Int64"})
     development = manifest.loc[manifest["split"].eq("train")].sort_values("lesion_id")
     if not manifest["lesion_id"].is_unique or set(development["validation_fold"]) != {1, 2, 3}:
         raise ValueError("Expected unique lesions and training folds 1, 2, and 3 in the frozen manifest")
+    partitions = manifest[["group_id", "split", "validation_fold"]].drop_duplicates()
+    if partitions["group_id"].isna().any() or not partitions["group_id"].is_unique:
+        raise ValueError("Expected each MILK10k group to belong to one frozen split or development fold")
     if not development["target"].eq(development["diagnosis_code"].map(TARGET_BY_DIAGNOSIS)).all():
         raise ValueError("Expected binary labels MEL=1 and NV=0")
     fold_classes = development.groupby("validation_fold")["target"].nunique()
     if not fold_classes.eq(2).all():
         raise ValueError("Each validation fold must include both diagnoses")
+    if catalog is not None:
+        development = catalog.milk_lesions(development)
     return development, hashlib.sha256(content).hexdigest()
 
 
@@ -76,6 +82,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_data_dir = Path(__file__).resolve().parents[1] / "data"
     parser.add_argument("--data-dir", type=Path, default=Path(os.environ.get("MILK10K_DATA_DIR", default_data_dir)))
+    parser.add_argument("--catalog", type=Path, help="Image catalog CSV, relative to --data-dir or absolute")
     parser.add_argument("--encoder", choices=CHECKPOINTS, nargs="+", default=list(CHECKPOINTS))
     parser.add_argument("--sensitivity-target", type=float, default=0.95, help="Exploratory development target (default: 0.95)")
     parser.add_argument("--batch-size", type=int, default=16, help="Number of lesion pairs per encoder batch")
@@ -90,7 +97,8 @@ def main() -> None:
     device = torch.device(args.device)
     torch.set_num_threads(min(4, torch.get_num_threads()))
 
-    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST)
+    catalog = load_catalog(args.catalog, data_dir)
+    development, manifest_hash = load_development(data_dir / "splits" / MANIFEST, catalog)
     targets = development["target"].to_numpy(dtype=int)
     folds = development["validation_fold"].to_numpy(dtype=int)
     predictions = development[["lesion_id", "diagnosis_code", "target", "validation_fold"]].copy()
@@ -126,6 +134,8 @@ def main() -> None:
         "exploratory_sensitivity_target": args.sensitivity_target,
         "results": results,
     }
+    if catalog is not None:
+        settings["catalog_sha256"] = catalog.sha256
     (output_dir / "metrics.json").write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     print(f"Results: {output_dir}")
 
