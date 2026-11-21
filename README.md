@@ -11,7 +11,7 @@ A medical computer vision project.
 ## Explore the data
 
 ```sh
-./scripts/notebook.sh
+./scripts/run_explore_notebook.sh
 ```
 
 Run this from the repository root to open the

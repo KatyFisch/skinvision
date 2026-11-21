@@ -44,8 +44,8 @@ phone photos in a separate evaluation before making any claims about that use.
 ## 1. Audit the data in JupyterLab
 
 Open the [data audit notebook](notebooks/01_data_audit.ipynb) with
-`./scripts/notebook.sh` and run it top to bottom. It addresses four questions
-before we train a model.
+`./scripts/run_explore_notebook.sh` and run it top to bottom. It addresses four
+questions before we train a model.
 
 1. **What is one example?** Build one row per lesion with both image paths, the
    diagnosis category, and metadata. Assert key uniqueness, complete joins, and
