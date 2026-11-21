@@ -13,14 +13,14 @@ from statistics import NormalDist
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image
+from PIL import Image, ImageOps
 from sklearn.metrics import classification_report, confusion_matrix
 from torch import nn
 from torch.utils.data import DataLoader
 from torchvision.models import resnet18
 
 from classifiers.catalog import MILK_DIAGNOSES, load_catalog
-from classifiers.encoders import build_preprocess, load_image
+from classifiers.encoders import build_preprocess
 from classifiers.eval_split.create_splits import FULL_MANIFEST_NAME
 from classifiers.eval_split.prepare_routed_tasks import OTHER_DIAGNOSIS_TARGETS, prepare_routed_tasks
 from classifiers.finetune_mel_nv import LesionImages, LesionResNet18, checkpoint_path
@@ -208,16 +208,26 @@ def evaluate(args: argparse.Namespace, device: torch.device) -> None:
     print(f"Results: {output}", flush=True)
 
 
-def predict_photo(model_path: Path, photo: Path, device: torch.device) -> dict:
-    model_path = model_path.expanduser().resolve()
-    config = json.loads(model_path.read_text())
-    cutoffs = Cutoffs(**config["cutoffs"])
-    image = load_image(photo.expanduser(), prepare_photo).unsqueeze(0).to(device)
-    routed, specialist = load_models(config["weights"], model_path.parent, device)
-    route, other = routing_scores(routed, image)
-    melanoma = specialist_scores(specialist, image) if route[0] >= cutoffs.router else [float("nan")]
-    scored = decisions(pd.DataFrame({"router_score": route, "melanoma_score": melanoma, "other_prediction": other}), cutoffs).iloc[0]
-    return {"research_prediction": scored["prediction"], "route": "MEL_OR_NV" if scored["to_specialist"] else "OTHER"}
+class PhotoClassifier:
+    def __init__(self, model_path: Path, device: torch.device) -> None:
+        model_path = model_path.expanduser().resolve()
+        config = json.loads(model_path.read_text())
+        self.cutoffs = Cutoffs(**config["cutoffs"])
+        self.routed, self.specialist = load_models(config["weights"], model_path.parent, device)
+        self.device = device
+
+    def predict(self, photo: Image.Image) -> dict[str, str]:
+        image = prepare_photo(ImageOps.exif_transpose(photo).convert("RGB")).unsqueeze(0).to(self.device)
+        route, other = routing_scores(self.routed, image)
+        melanoma = specialist_scores(self.specialist, image) if route[0] >= self.cutoffs.router else [float("nan")]
+        scores = pd.DataFrame({"router_score": route, "melanoma_score": melanoma, "other_prediction": other})
+        scored = decisions(scores, self.cutoffs).iloc[0]
+        return {"research_prediction": scored["prediction"], "route": "MEL_OR_NV" if scored["to_specialist"] else "OTHER"}
+
+
+def predict_photo(model_path: Path, photo: Path, device: torch.device) -> dict[str, str]:
+    with Image.open(photo.expanduser()) as image:
+        return PhotoClassifier(model_path, device).predict(image)
 
 
 def main() -> None:

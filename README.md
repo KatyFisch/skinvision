@@ -39,6 +39,18 @@ another checkout, set `MILK10K_DATA_DIR` to its absolute path.
 
 Clear notebook outputs before committing to keep lesion photos out of Git.
 
+## Run the local photo demo
+
+```sh
+uv run --locked python -m demo --model data/experiments/single-photo/20261121T200623773355Z/model.json
+```
+
+Open `http://127.0.0.1:8765`. Use a curated JPEG or PNG to see the model's
+predicted label and classifier branch. The demo processes the upload in memory
+on your computer. Replace the model path with `model.json` from your own
+[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
+or put a link to it at `data/models/single-photo/model.json` to omit `--model`.
+
 ## Attribution
 
 MILK study team. MILK10k. ISIC Archive, 2025, doi:10.34970/648456.
