@@ -6,8 +6,8 @@ suggest. The project is a collaboration between a software developer learning
 machine learning and a biostatistics PhD collaborator.
 
 - Use [PLAN.md](PLAN.md) for the current milestones and decisions.
-- Start with one clinical close-up per lesion. Treat dermoscopy and optional
-  metadata as later experiments with explicit input requirements.
+- Start with the paired clinical and dermoscopic images for the dataset
+  classifier. Evaluate ordinary phone photos when working toward the product.
 - Keep paired images and other known related samples together when splitting
   data. Document the split, label provenance, and limits of the evaluation.
 - Keep raw data in the ignored `data/` directory. Preserve dataset attribution

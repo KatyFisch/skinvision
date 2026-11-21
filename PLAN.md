@@ -67,10 +67,9 @@ analysis, label mapping, and known limits on splitting and evaluation.
 
 ## 2. Freeze the evaluation protocol
 
-- Save a reproducible split manifest. Group by patient where IDs are available.
-  Otherwise group by lesion and keep any linked duplicates together. Reserve an
-  internal holdout before fitting anything, stratify by diagnosis where
-  feasible, and inspect counts before choosing the number of development folds.
+- Use the [versioned split manifest](data_prep/README.md) with a 20% test
+  holdout and three development folds. Both views of each lesion and exact
+  duplicates share an assignment. Group by patient if IDs become available.
 - Use validation folds for model selection, calibration, and thresholds. Agree
   with the biostatistics collaborator on what can be estimated with the
   available sample sizes, and report counts and uncertainty alongside scores.
@@ -81,20 +80,19 @@ analysis, label mapping, and known limits on splitting and evaluation.
   threshold of 0.5 and a local top-class prediction uses argmax.
   [Official evaluation protocol](https://challenge.isic-archive.com/landing/milk10k/#evaluation)
 
-## 3. Train a clinical-photo baseline
+## 3. Train a paired-image baseline
 
-Start with a majority-class baseline and a small pretrained image model with a
-classifier head. Use the clinical close-up alone. Fine-tune if evaluation shows
-room for improvement, then inspect errors for missed predictions and shortcuts.
-The existing segmentation notebook is useful background. Whole-image
-classification can get us to a baseline sooner, and segmentation is worth
-revisiting if the error analysis shows the lesion is frequently missed.
+Start with a majority-class baseline and a small pretrained image model. Encode
+the clinical close-up and dermoscopic image and combine their features in one
+classifier head per lesion. Fine-tune if evaluation shows room for improvement,
+then inspect errors for missed predictions and shortcuts. Whole-image
+classification can get us to a baseline sooner. Revisit segmentation if the
+error analysis shows the lesion is frequently missed.
 
 Keep filenames, identifiers, and the diagnostic supplement out of model
-features. Add available-at-capture metadata or dermoscopy only as controlled
-comparisons on the same split. Report paired-image results under their own input
-assumptions. Run the frozen model on the internal holdout and consider an ISIC
-submission for comparison with the official benchmark.
+features. Use the same split for later comparisons with either image alone or
+with available-at-capture metadata. Run the frozen model on the internal holdout
+and consider an ISIC submission for comparison with the official benchmark.
 
 ## 4. Test the product assumption and build a private demo
 
