@@ -1,0 +1,151 @@
+
+# ============================================================
+# Python
+# ============================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Distribution / packaging
+build/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+MANIFEST
+
+# ============================================================
+# Virtual environments
+# ============================================================
+
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+
+# Allow an example environment file
+!.env.example
+
+# ============================================================
+# Jupyter Notebook
+# ============================================================
+
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+jupyter_runtime/
+
+# ============================================================
+# Machine Learning: datasets
+# ============================================================
+
+# Ignore downloaded datasets and extracted images
+data/*
+!data/README.md
+!data/.gitkeep
+
+# ============================================================
+# Machine Learning: models and checkpoints
+# ============================================================
+
+# Model weights and checkpoints
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.hdf5
+*.safetensors
+*.pkl
+*.joblib
+
+# TensorFlow / PyTorch logs
+runs/
+lightning_logs/
+wandb/
+mlruns/
+tensorboard/
+logs/
+
+# ============================================================
+# Experiment outputs
+# ============================================================
+
+outputs/
+experiments/
+predictions/
+visualizations/
+results/
+
+# ============================================================
+# IDEs and editors
+# ============================================================
+
+# VS Code
+.vscode/
+
+# PyCharm / IntelliJ
+.idea/
+
+# JupyterLab
+.jupyter/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Operating system files
+# ============================================================
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+
+# ============================================================
+# Temporary files
+# ============================================================
+
+*.tmp
+*.temp
+*.bak
+*.log
+*.old
+.cache/
+tmp/
+temp/
+
+# ============================================================
+# Secrets and credentials
+# ============================================================
+
+*.pem
+*.key
+secrets.json
+credentials.json
