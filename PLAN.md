@@ -123,6 +123,11 @@ between datasets.
 - Build and evaluate a version of each stage that accepts a single ordinary
   photo. Use clinical-only MILK10k models as a starting point and test the
   complete pipeline on self-taken photos.
+- Carry forward the originals-only training recipe for the clinical MEL-vs-NV
+  specialist. On the local MILK10k holdout, the originals-only run flagged 112
+  of 149 nevi and the expanded augmentation run flagged 113 at the same
+  sensitivity of 86 out of 90 melanomas.
+  [Clinical augmentation experiment](classifiers/augmentation/README.md)
 - Look for independently labeled, self-taken phone photos from the intended
   population. Check label compatibility and measure the effect of device,
   lighting, skin tone, image quality, and unfamiliar conditions. Test how often
