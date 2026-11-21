@@ -1,23 +1,29 @@
 # skinvision
-a medical computer vision project
 
+A medical computer vision project.
 
 ## Set up
-* Download Training Data and Training Ground Truth from https://challenge.isic-archive.com/data/#milk10k
-* Extract to data/ such that data/ contains the 3 .csv files and the MILK10k_Training_Input folder
-* `uv sync` to install requirements
 
-## Run the notebook
+- Download the images, metadata, supplemental metadata, and ground truth from
+  [ISIC's MILK10k downloads](https://challenge.isic-archive.com/data/#milk10k).
+- Put the three CSVs and the `MILK10k_Training_Input` folder in `data/`.
+
+## Explore the data
 
 ```sh
-uv run notebook
+./scripts/run_explore_notebook.sh
 ```
 
-Run this from the repository root to open `notebooks/segmentation.ipynb` in
-JupyterLab in your browser. Press `Shift+Enter` to run a cell and `Ctrl+C` in
-the terminal to stop JupyterLab.
+Run this from the repository root to open the
+[data audit notebook](notebooks/01_data_audit.ipynb) in JupyterLab. `uv`
+installs the project dependencies as needed. Press `Shift+Enter` to run each
+cell and `Ctrl+C` in the terminal to stop JupyterLab. If the dataset lives in
+another checkout, set `MILK10K_DATA_DIR` to its absolute path.
 
-## Attribution:
+Clear notebook outputs before committing to keep lesion photos out of Git.
+
+## Attribution
+
 MILK study team. MILK10k. ISIC Archive, 2025, doi:10.34970/648456.
 
 MILK study team. MILK10k Benchmark. ISIC Archive, 2025, doi:10.34970/262082.
