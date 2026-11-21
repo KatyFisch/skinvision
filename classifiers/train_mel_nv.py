@@ -15,7 +15,7 @@ import sklearn
 import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix, roc_auc_score, roc_curve
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 from classifiers.encoders import CHECKPOINTS, encode_pairs
@@ -38,12 +38,15 @@ def load_development(manifest_path: Path) -> tuple[pd.DataFrame, str]:
     return development, hashlib.sha256(content).hexdigest()
 
 
+def fit_frozen_head(features: np.ndarray, targets: np.ndarray) -> Pipeline:
+    return make_pipeline(StandardScaler(), LogisticRegression(C=1.0, max_iter=2000)).fit(features, targets)
+
+
 def predict_folds(features: np.ndarray, targets: np.ndarray, folds: np.ndarray) -> np.ndarray:
     scores = np.empty(len(targets))
     for fold in sorted(set(folds)):
         validation = folds == fold
-        classifier = make_pipeline(StandardScaler(), LogisticRegression(C=1.0, max_iter=2000))
-        classifier.fit(features[~validation], targets[~validation])
+        classifier = fit_frozen_head(features[~validation], targets[~validation])
         scores[validation] = classifier.predict_proba(features[validation])[:, 1]
     return scores
 

@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.parse import urlparse
@@ -20,6 +21,11 @@ CHECKPOINTS = {
 }
 FEATURE_CACHE_VERSION = 1
 IMAGE_COLUMNS = ["clinical_path", "dermoscopic_path"]
+
+
+def load_image(path: Path, preprocess: Callable[[Image.Image], torch.Tensor]) -> torch.Tensor:
+    with Image.open(path) as photo:
+        return preprocess(ImageOps.exif_transpose(photo).convert("RGB"))
 
 
 def load_checkpoint(url: str, sha256: str, data_dir: Path) -> Path:
@@ -81,11 +87,7 @@ def encode_pairs(
     with torch.inference_mode():
         for start in range(0, len(pairs), batch_size):
             batch = pairs.iloc[start : start + batch_size]
-            images = []
-            for column in IMAGE_COLUMNS:
-                for relative_path in batch[column]:
-                    with Image.open(data_dir / relative_path) as photo:
-                        images.append(preprocess(ImageOps.exif_transpose(photo).convert("RGB")))
+            images = [load_image(data_dir / relative_path, preprocess) for column in IMAGE_COLUMNS for relative_path in batch[column]]
             embeddings = encoder(torch.stack(images).to(device)).cpu().numpy()
             clinical, dermoscopic = np.split(embeddings, 2)
             feature_batches.append(np.concatenate((clinical, dermoscopic), axis=1))

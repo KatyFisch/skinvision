@@ -29,3 +29,23 @@ evaluation images.
 Weights, cached features, and run outputs live under the ignored dataset
 directory. Each run saves `metrics.json` and `validation_predictions.csv` in
 `experiments/mel-nv/<run-id>/`.
+
+## Fine-tune the paired ResNet-18
+
+```sh
+uv run --locked python -m classifiers.finetune_mel_nv
+```
+
+Each fold runs two passes using only its training lesions:
+
+1. Fit the same logistic regression head on the frozen paired features.
+2. Load that head into PyTorch and update it along with ResNet's last block
+   (`layer4`) for five epochs. The head uses a learning rate of `0.001` and the
+   block uses `0.0001`. Earlier layers and BatchNorm running statistics stay
+   fixed. Both passes use the checkpoint's original image preprocessing.
+
+The run compares both passes on the same held-out development folds. Per-fold
+metrics use a separate exploratory cutoff for each fold. The overall metrics
+use one cutoff selected from the pooled development predictions for each pass.
+Each run saves both sets of scores, the training losses, and one final
+checkpoint per fold under `data/experiments/mel-nv/<run-id>-resnet18-finetune/`.
