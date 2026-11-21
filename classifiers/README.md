@@ -5,6 +5,11 @@ checkpoint's RGB normalization. The selected clinical MEL-vs-NV variant is
 the native-resolution, five-epoch run with a refitted head. Its three local
 development checkpoints are in `data/models/clinical-mel-nv/`.
 
+The selected native paired baselines are in `data/models/mel-nv-router/` and
+`data/models/other-diagnoses/`. Each directory has the three fitted fold heads
+and metrics for the shared run. Each of these heads takes features from both
+the clinical and dermoscopic photo.
+
 ## Use the preprocessed image catalog
 
 Pass `--catalog final_data.csv` to the classifier commands to use the export from
