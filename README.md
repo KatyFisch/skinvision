@@ -3,6 +3,8 @@
 SkinVision explores possible skin lesion diagnoses from phone photos.\
 The local demo shows classifier predictions on curated examples.
 
+[![Watch SkinVision analyze Melanoma close-up and BCC on back](docs/skinvision-demo.webp)](docs/skinvision-demo.mp4)
+
 ## Set up
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/). Sign in to
@@ -19,9 +21,6 @@ uv run --locked python -m demo
 Open [the local demo](http://127.0.0.1:8765) and pick a sample photo. On the first
 run, the demo also fetches the router and U-Net checkpoints using your Git access
 to this repository.
-
-[Watch the demo (MP4)](docs/skinvision-demo.mp4) to see the app analyze
-**Melanoma close-up** and **BCC on back**.
 
 For training, download the images, metadata, supplemental metadata, and ground
 truth from [ISIC’s MILK10k downloads](https://challenge.isic-archive.com/data/#milk10k).
