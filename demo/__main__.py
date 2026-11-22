@@ -16,8 +16,9 @@ from PIL import Image, ImageOps
 
 from classifiers.export_padded_crop import PaddedCropTorchModel
 from classifiers.lesion_crop import crop_with_skin_margin, frame_photo, skin_margin_box
+from classifiers.model import DermFMClassifier
 from classifiers.segmentation import LesionSegmenter
-from classifiers.single_photo import PhotoClassifier
+from classifiers.single_photo import LesionRouter, PhotoClassifier
 from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
 from demo.samples import BUNDLED_SAMPLE_DIR, SAMPLE_ASSETS, available_samples
 from demo.segmentation import outline_path, overlay_png
@@ -40,6 +41,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         segmenter: LesionSegmenter,
         inference_lock: LockType,
         padded_crop: bool = False,
+        routing: tuple[LesionRouter, DermFMClassifier] | None = None,
         samples_dir: Path = BUNDLED_SAMPLE_DIR,
         **kwargs,
     ) -> None:
@@ -47,6 +49,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         self.segmenter = segmenter
         self.inference_lock = inference_lock
         self.padded_crop = padded_crop
+        self.routing = routing
         self.samples_dir = samples_dir
         super().__init__(*args, **kwargs)
 
@@ -89,7 +92,9 @@ class DemoHandler(BaseHTTPRequestHandler):
                     self.send_event({"overlay": overlay, "outline": outline_path(mask)})
 
                 result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
-                if self.padded_crop:
+                if self.routing and has_mask and not self.routing[0].uses_specialist(photo):
+                    result.update(research_prediction=self.routing[1].predict_other(photo), route="OTHER", analysis_input="full_frame")
+                elif self.padded_crop:
                     prepared = crop_with_skin_margin(photo, mask)
                     result.update(self.classifier.predict(prepared))
                     result["analysis_input"] = "padded_crop" if has_mask else "original_photo"
@@ -178,6 +183,10 @@ def main() -> None:
         default=default_model,
         help="Exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json",
     )
+    router_default = data_dir / "models/cascade-router/model.json"
+    other_default = data_dir / "models/direct-11"
+    parser.add_argument("--router-model", type=Path, help=f"Cascade manifest for the router (default if present: {router_default})")
+    parser.add_argument("--other-model", type=Path, help=f"Direct 11-class run for other diagnoses (default if present: {other_default})")
     segmentation_model = ROOT.parent / "models/unet_segmentation_full"
     if not segmentation_model.is_dir():
         segmentation_model = segmentation_model.with_suffix(".pth")
@@ -195,14 +204,28 @@ def main() -> None:
     elif not model.is_file():
         parser.error("Pass --model with exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json.")
     padded_crop = run_dir or model.suffix == ".pth"
+    if not padded_crop and (args.router_model or args.other_model):
+        parser.error("A separate router and other-diagnosis model require a padded-crop --model.")
+    router_model = (args.router_model or router_default).expanduser()
+    other_model = (args.other_model or other_default).expanduser()
+    use_routing = padded_crop and bool(args.router_model or args.other_model or router_model.exists() or other_model.exists())
+    if use_routing and not (router_model.is_file() and all((other_model / name).is_file() for name in ("metrics.json", "heads.joblib"))):
+        parser.error("Routed analysis requires a cascade --router-model manifest and a direct 11-class --other-model directory.")
     checkpoint = args.segmentation_model.expanduser()
     if not (checkpoint.is_file() or (checkpoint / "data.pkl").is_file()):
         parser.error("Pass --segmentation-model with the U-Net checkpoint or its extracted folder.")
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
     classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
+    routing = None
+    if use_routing and isinstance(classifier, PaddedCropTorchModel):
+        router = LesionRouter(router_model, device)
+        other_classifier = DermFMClassifier(other_model, data_dir, device, expected_task="direct_11", encoder=classifier.encoder)
+        routing = (router, other_classifier)
     segmenter = LesionSegmenter(checkpoint, device)
-    handler = partial(DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), padded_crop=padded_crop)
+    handler = partial(
+        DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), padded_crop=padded_crop, routing=routing
+    )
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
         print(f"SkinVision is running at http://127.0.0.1:{server.server_port}", flush=True)
         try:

@@ -67,12 +67,13 @@ class DermFMClassifier:
         *,
         expected_task: Task | None = None,
         segmentation_model: Path | None = None,
+        encoder: dermfm_zero.DermFMVisionTransformer | None = None,
     ) -> None:
         self.task, self.cutoff, self.heads = load_classifier_run(run_dir, expected_task)
         self.labels = TASK_LABELS[self.task]
         self.device = device
         self.preprocess = dermfm_zero.clinical_preprocess()
-        self.encoder = dermfm_zero.load_clinical_encoder(data_dir, device)
+        self.encoder = encoder if encoder is not None else dermfm_zero.load_clinical_encoder(data_dir, device)
         self.segmentation_model = segmentation_model
         self.segmenter: LesionSegmenter | None = None
 
@@ -96,6 +97,12 @@ class DermFMClassifier:
         if self.task == "padded_crop":
             result["melanoma_score_band"] = melanoma_score_band(melanoma, self.cutoff)
         return result
+
+    def predict_other(self, photo: Image.Image) -> str:
+        """Pick the strongest diagnosis among the nine classes handled by the other branch."""
+        scores = self.score_photo(photo)
+        other_indices = (index for index, label in enumerate(self.labels) if label not in {"MEL", "NV"})
+        return self.labels[max(other_indices, key=lambda index: scores[index])]
 
     def predict_file(self, path: Path) -> dict[str, str | float | None]:
         photo = load_rgb(path)

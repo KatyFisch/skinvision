@@ -79,6 +79,7 @@ class ClassifierTrainingTest(TestCase):
                     sample_id = predictions["holdout"].index[-1]
                     sample = features[rows.index.get_loc(sample_id)]
                     photo = Image.new("RGB", (16, 16))
+                    demo_results = []
                     with patch(
                         "classifiers.dermfm_zero.load_clinical_encoder", return_value=lambda _, encoded=sample: torch.tensor(encoded[None])
                     ):
@@ -102,3 +103,9 @@ class ClassifierTrainingTest(TestCase):
                             np.testing.assert_allclose(demo_score, score, rtol=1e-6)
                     else:
                         self.assertNotIn("melanoma_score_band", result)
+                        competing_scores = np.zeros(len(reloaded.labels))
+                        competing_scores[reloaded.labels.index("MEL")] = 0.50
+                        competing_scores[reloaded.labels.index("NV")] = 0.30
+                        competing_scores[reloaded.labels.index("BCC")] = 0.20
+                        with patch.object(reloaded, "score_photo", return_value=competing_scores):
+                            self.assertEqual(reloaded.predict_other(photo), "BCC")

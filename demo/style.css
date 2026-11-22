@@ -171,6 +171,7 @@ h1, h2, p, ul { margin: 0; }
 [data-outcome="high"] .result-label { color: #933c31; }
 [data-outcome="inconclusive"] .result-label { color: #76561d; }
 [data-outcome="low"] .result-label { color: var(--green); }
+[data-outcome="other"] .result-label { font-size: clamp(28px, 3vw, 38px); line-height: 1.1; }
 .result-note { margin-top: 9px; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .research-note { border-radius: 12px; padding: 12px 16px; background: var(--note); color: #493b29; }
 .research-note h2 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }

@@ -89,6 +89,28 @@ is empty, the classifier uses the original crop and the demo displays an
 inconclusive result with instructions to adjust the crop.
 Processing stays in memory on your computer.
 
+### Run the three-model demo
+
+With a saved ResNet cascade and direct 11-class run, start the demo with:
+
+```sh
+uv run --locked python -m demo --router-model path/to/cascade/model.json --other-model path/to/direct-11-run
+```
+
+The demo also enables routing when both `data/models/cascade-router/model.json`
+and `data/models/direct-11/` are present. `MILK10K_DATA_DIR` replaces `data/`
+in these paths when set. Keep the cascade manifest beside its original
+relative checkpoint paths or link its directory into `data/models/cascade-router`.
+Use a trusted direct 11-class run containing `metrics.json` and `heads.joblib`.
+The extra weights are local artifacts. A checkout with no router or direct
+model still runs the padded-crop demo.
+
+The router scores the full frame at its saved cutoff. The MEL/NV branch uses
+the padded crop and reports the binary model's suggestion and melanoma signal.
+The other branch scores the full frame and shows the leading diagnosis among
+the nine other classes. A missing lesion mask still gives an inconclusive
+result. The combined pipeline has not been evaluated as a clinical tool.
+
 To run the saved legacy cascade, pass its `model.json` with `--model`. Keep the
 checkpoints referenced by that file at their saved relative paths. The cascade
 uses the black-background input and shows a melanoma outcome on its

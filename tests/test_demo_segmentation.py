@@ -23,8 +23,15 @@ class DemoSegmentationTest(TestCase):
         segmenter.mask.return_value = self.mask
         self.segmenter = segmenter
 
-    def start_client(self, *, padded_crop: bool = False) -> None:
-        handler = partial(DemoHandler, classifier=self.classifier, segmenter=self.segmenter, inference_lock=Lock(), padded_crop=padded_crop)
+    def start_client(self, *, padded_crop: bool = False, routing: tuple[Mock, Mock] | None = None) -> None:
+        handler = partial(
+            DemoHandler,
+            classifier=self.classifier,
+            segmenter=self.segmenter,
+            inference_lock=Lock(),
+            padded_crop=padded_crop,
+            routing=routing,
+        )
         server = self.enterContext(ThreadingHTTPServer(("127.0.0.1", 0), handler))
         Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(server.shutdown)
@@ -111,7 +118,9 @@ class DemoSegmentationTest(TestCase):
         self.classifier.predict.assert_not_called()
 
     def test_padded_classifier_receives_the_training_crop(self) -> None:
-        self.start_client(padded_crop=True)
+        router, other = Mock(), Mock()
+        router.uses_specialist.return_value = True
+        self.start_client(padded_crop=True, routing=(router, other))
         self.photo.paste((210, 25, 40), (220, 170, 255, 190))
         self.mask.paste(255, (220, 170, 255, 190))
         self.classifier.predict.return_value = {"research_prediction": "MEL", "route": "MEL_OR_NV"}
@@ -124,9 +133,30 @@ class DemoSegmentationTest(TestCase):
         self.assertEqual(result["analysis_input"], "padded_crop")
         classified = self.classifier.predict.call_args.args[0]
         self.assertIsNone(ImageChops.difference(classified, crop_with_skin_margin(self.photo, self.mask)).getbbox())
+        self.assertIsNone(ImageChops.difference(router.uses_specialist.call_args.args[0], self.photo).getbbox())
+        other.predict_other.assert_not_called()
+
+    def test_other_branch_uses_the_full_photo_and_skips_the_specialist(self) -> None:
+        router, other = Mock(), Mock()
+        router.uses_specialist.return_value = False
+        other.predict_other.return_value = "BCC"
+        self.start_client(padded_crop=True, routing=(router, other))
+        self.photo.paste((210, 25, 40), (220, 170, 255, 190))
+        self.mask.paste(255, (220, 170, 255, 190))
+
+        self.send_photo(ANALYSIS_STREAM)
+        with self.client.getresponse() as response:
+            self.assertTrue(json.loads(response.readline())["outline"])
+            self.assertEqual(
+                json.loads(response.readline()), {"research_prediction": "BCC", "route": "OTHER", "analysis_input": "full_frame"}
+            )
+        other.predict_other.assert_called_once()
+        self.assertIsNone(ImageChops.difference(other.predict_other.call_args.args[0], self.photo).getbbox())
+        self.classifier.predict.assert_not_called()
 
     def test_padded_classifier_uses_the_original_photo_with_an_empty_mask(self) -> None:
-        self.start_client(padded_crop=True)
+        router, other = Mock(), Mock()
+        self.start_client(padded_crop=True, routing=(router, other))
         self.classifier.predict.return_value = {"research_prediction": "NV", "route": "MEL_OR_NV"}
 
         self.send_photo(ANALYSIS_STREAM)
@@ -140,3 +170,5 @@ class DemoSegmentationTest(TestCase):
         self.assertEqual(result["research_prediction"], "NV")
         classified = self.classifier.predict.call_args.args[0]
         self.assertIsNone(ImageChops.difference(classified, self.photo).getbbox())
+        router.uses_specialist.assert_not_called()
+        other.predict_other.assert_not_called()

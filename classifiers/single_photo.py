@@ -74,19 +74,27 @@ class RoutedResNet18(nn.Module):
         return self.router(features).squeeze(-1), self.other(features)
 
 
-def load_models(weights: list[dict[str, str]], base: Path, device: torch.device) -> tuple[list[RoutedResNet18], list[LesionResNet18]]:
-    def encoder() -> nn.Module:
-        model = resnet18()
-        model.set_submodule("fc", nn.Identity())
-        return model
+def resnet_encoder() -> nn.Module:
+    model = resnet18()
+    model.set_submodule("fc", nn.Identity())
+    return model
 
-    routed, specialist = [], []
+
+def load_routed_models(weights: list[dict[str, str]], base: Path, device: torch.device) -> list[RoutedResNet18]:
+    routed = []
     for paths in weights:
-        routing = RoutedResNet18(encoder())
-        detail = LesionResNet18(encoder())
+        routing = RoutedResNet18(resnet_encoder())
         routing.load_state_dict(torch.load(base / paths["routed"], map_location="cpu", weights_only=True))
-        detail.load_state_dict(torch.load(base / paths["specialist"], map_location="cpu", weights_only=True))
         routed.append(routing.eval().to(device))
+    return routed
+
+
+def load_models(weights: list[dict[str, str]], base: Path, device: torch.device) -> tuple[list[RoutedResNet18], list[LesionResNet18]]:
+    routed = load_routed_models(weights, base, device)
+    specialist = []
+    for paths in weights:
+        detail = LesionResNet18(resnet_encoder())
+        detail.load_state_dict(torch.load(base / paths["specialist"], map_location="cpu", weights_only=True))
         specialist.append(detail.eval().to(device))
     return routed, specialist
 
@@ -102,6 +110,25 @@ def routing_scores(models: list[RoutedResNet18], photos: torch.Tensor) -> tuple[
 @torch.inference_mode()
 def specialist_scores(models: list[LesionResNet18], photos: torch.Tensor) -> np.ndarray:
     return torch.stack([model(photos).sigmoid() for model in models]).mean(dim=0).cpu().numpy()
+
+
+class LesionRouter:
+    def __init__(self, model_path: Path, device: torch.device) -> None:
+        model_path = model_path.expanduser().resolve()
+        config = json.loads(model_path.read_text())
+        self.cutoff = float(config["cutoffs"]["router"])
+        if not 0 <= self.cutoff <= 1 or not config["weights"]:
+            raise ValueError("Expected a valid router cutoff and at least one routed checkpoint")
+        self.models = load_routed_models(config["weights"], model_path.parent, device)
+        self.device = device
+
+    @torch.inference_mode()
+    def uses_specialist(self, photo: Image.Image) -> bool:
+        image = prepare_photo(ImageOps.exif_transpose(photo).convert("RGB")).unsqueeze(0).to(self.device)
+        score = torch.stack([model.router(model.encoder(image)).sigmoid() for model in self.models]).mean().item()
+        if not math.isfinite(score):
+            raise RuntimeError("The router returned an invalid score")
+        return score >= self.cutoff
 
 
 class PhotoClassifier:

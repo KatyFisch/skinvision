@@ -89,8 +89,10 @@ retired from training, their results, and why the current recipes were selected.
 
 ## 3. Test the phone-photo workflow with curated examples
 
-- Keep the demo private and use curated, licensed examples. The current app
-  uses the padded-crop model and can still load the historical cascade.
+- Keep the demo private and use curated, licensed examples. The app uses the
+  padded-crop model on its own or routes to it and the direct 11-class model
+  when the saved router and direct model are configured. It can also load the
+  historical cascade.
 - Look for independently labeled, self-taken phone photos from the intended
   population. Check label compatibility and measure the effect of device,
   lighting, skin tone, image quality, and unfamiliar conditions. Test how often

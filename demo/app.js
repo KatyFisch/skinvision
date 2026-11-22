@@ -21,6 +21,20 @@ const outcomes = {
   },
 };
 
+const diagnoses = {
+  MEL: 'Melanoma',
+  NV: 'Melanocytic nevus (mole)',
+  AKIEC: 'Actinic keratosis or intraepidermal carcinoma',
+  BCC: 'Basal cell carcinoma',
+  BEN_OTH: 'Other benign growth',
+  BKL: 'Benign keratinocytic lesion',
+  DF: 'Dermatofibroma',
+  INF: 'Inflammatory or infectious condition',
+  MAL_OTH: 'Other malignant growth',
+  SCCKA: 'Squamous cell carcinoma or keratoacanthoma',
+  VASC: 'Vascular lesion or bleeding',
+};
+
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const dropzone = document.getElementById('dropzone');
 const choose = document.getElementById('choose');
@@ -46,6 +60,7 @@ const resultLoading = document.getElementById('result-loading');
 const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultLabel = document.getElementById('result-label');
+const resultSuggestion = document.getElementById('result-suggestion');
 const resultDescription = document.getElementById('result-description');
 
 let photo;
@@ -87,17 +102,24 @@ function showPrediction(data) {
     heatmapNote.hidden = false;
   }
   const missingLesion = data.analysis_input === 'original_photo' || data.research_prediction === null;
+  const diagnosis = missingLesion ? undefined : diagnoses[data.research_prediction];
+  const otherDiagnosis = data.route === 'OTHER' ? diagnosis : undefined;
   const scoredOutcome = melanomaOutcomes[data.melanoma_score_band];
   const outcome = missingLesion ? 'inconclusive' : (scoredOutcome ?? 'inconclusive');
   const { title, description } = outcomes[outcome];
   let explanation = description;
   if (missingLesion) {
     explanation = 'The model could not find a lesion in this crop. Adjust the framing to include the whole lesion and try again.';
+  } else if (otherDiagnosis) {
+    explanation = 'The research model suggested this diagnosis from the photo.';
   } else if (!scoredOutcome) {
     explanation = 'The model did not return a melanoma score for this crop.';
   }
-  resultDone.dataset.outcome = outcome;
-  resultLabel.textContent = title;
+  const specialistSuggestion = data.route === 'MEL_OR_NV' && diagnosis;
+  resultSuggestion.textContent = specialistSuggestion ? `Model suggestion: ${specialistSuggestion}. ` : '';
+  resultSuggestion.hidden = !specialistSuggestion;
+  resultDone.dataset.outcome = otherDiagnosis ? 'other' : outcome;
+  resultLabel.textContent = otherDiagnosis ?? title;
   resultDescription.textContent = explanation;
   showResult('done');
 }

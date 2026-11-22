@@ -52,8 +52,9 @@ Load model bundles from trusted sources.
 
 The demo defaults to the checked-in padded-crop heads. Pass a saved padded-crop
 directory to the demo with `--model` to try a new run. The demo also accepts the
-existing ResNet cascade `model.json` and its referenced checkpoints. The direct
-11-class model runs from the notebook.
+existing ResNet cascade `model.json` and its referenced checkpoints. The
+[three-model demo](../README.md#run-the-three-model-demo) uses the saved router,
+the padded-crop specialist, and a direct 11-class run for other diagnoses.
 
 ## Explain a padded-crop prediction
 
