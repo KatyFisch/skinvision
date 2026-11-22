@@ -148,11 +148,28 @@ uv run --locked python -m classifiers.compare_clinical --encoder panderm_base
 ```
 
 Use `--data-dir` to point to an existing MILK10k catalog and frozen splits.
-Both commands cache embeddings from the same native 600 × 450 clinical
+The commands cache embeddings from the same native 600 × 450 clinical
 photos. PanDerm Base uses the published ViT-B/16 weights, with positional
 interpolation and zero padding to complete edge patches. The encoder stays
 frozen. [PanDerm checkpoint and license](https://github.com/SiyuanYan1/PanDerm#1-download-panderm-pre-trained-weights) ·
 [PanDerm paper and pretraining sources](https://doi.org/10.1038/s41591-025-03747-y)
+
+To include DermFM-Zero-Open, accept the research terms on the model page and
+sign in locally with a token that can read the gated repository:
+
+```sh
+uv run --locked hf auth login
+uv run --locked python -m classifiers.compare_clinical --encoder dermfm_zero_open
+```
+
+The run uses the frozen vision encoder's 1,024 pooled features before the
+projection used for text matching. It retains the full clinical frame and
+uses the release's RGB normalization, bicubic positional interpolation, and
+zero padding at the image edges. The checkpoint revision and published ISIC
+image list are verified by checksum. Weights and the image list are cached
+locally under `data/checkpoints/dermfm-zero/`.
+[DermFM-Zero-Open weights and terms](https://huggingface.co/redlessone/DermFM-Zero) ·
+[Authors' linear-probe implementation](https://github.com/SiyuanYan1/DermFM-Zero/blob/c9f3d6a149ab048ae8a98ea4701e23b271e7368a/src/open_clip/utils.py)
 
 The experiment compares a refitted cascade, a binary head trained on melanoma
 and all other diagnoses, and a direct 11-class head. Every head uses regularized
@@ -160,7 +177,7 @@ logistic regression. A deterministic group-stratified sample of 825 development
 lesions (72 melanomas) calibrates the cutoffs. The three ensemble members each
 train on the non-calibration groups from two frozen folds. The same fitted
 members and probability averaging score calibration and the 1,048-lesion
-holdout. All six configs flagged 69 of 72 calibration melanomas at the 95%
+holdout. All nine configurations flagged 69 of 72 calibration melanomas at the 95%
 target. The cascade retains its 99% routing target. The 11-class decisions
 use the melanoma cutoff, then the highest-scoring other class for unflagged
 lesions.
@@ -173,20 +190,30 @@ lesions.
 | PanDerm Base | Cascade | 79/90 | 24.3% | 0.626 | 0.102 |
 | PanDerm Base | Melanoma vs. rest | 87/90 | 56.3% | 0.857 | — |
 | PanDerm Base | Direct 11-class | 83/90 | 59.6% | 0.871 | 0.237 |
+| DermFM-Zero-Open | Cascade | 82/90 | 71.4% | 0.876 | 0.341 |
+| DermFM-Zero-Open | Melanoma vs. rest | 89/90 | 62.4% | 0.926 | — |
+| DermFM-Zero-Open | Direct 11-class | 86/90 | 67.7% | 0.924 | 0.323 |
 
-At the locked cutoffs, PanDerm melanoma-vs-rest flagged 153 fewer
-non-melanomas than the equivalent ResNet-18 head and flagged one additional
-melanoma. PanDerm's direct head improved macro F1, but its achieved sensitivity
-was 92.2%. When comparing ranking at the same 86 of 90 holdout melanomas,
-specificity was 59.5% for PanDerm melanoma-vs-rest, 53.3% for ResNet-18 direct,
-and 46.7% for PanDerm direct. The latter comparison uses holdout labels to find
-the operating points and is descriptive.
+At the locked cutoffs, DermFM-Zero-Open's melanoma-vs-rest head flagged two
+additional melanomas and 59 fewer non-melanomas than the PanDerm Base version.
+The direct 11-class head also reached the 95% sensitivity target and raised
+macro F1 from 0.237 to 0.323. The DermFM-Zero-Open cascade had the highest macro
+F1 of these runs and reached 91.1% melanoma sensitivity. At a retrospectively
+matched sensitivity of 86 of 90 melanomas, specificity for the
+DermFM-Zero-Open cascade, binary head, and direct 11-class head was 70.4%,
+71.5%, and 69.4%, respectively. This ranking comparison uses holdout labels to
+choose the operating points.
 
 PanDerm's pretraining includes ISIC Archive data. MILK10k includes lesions
 previously archived in ISIC, and available provenance does not establish
 whether earlier images of these lesions were used in the checkpoint. Treat the
 comparison as exploratory. The local holdout is also from the same clinic-photo
-release used for development. [MILK10k dataset provenance](https://api.isic-archive.com/doi/milk10k/)
+release used for development. None of the 38,404 ISIC IDs in DermFM-Zero-Open's
+published list exactly matched the current MILK10k clinical or dermoscopic
+image IDs. Older archive identifiers and the other pretraining sources can
+still contain related images.
+[MILK10k dataset provenance](https://api.isic-archive.com/doi/milk10k/) ·
+[DermFM-Zero-Open pretraining sources](https://huggingface.co/redlessone/DermFM-Zero#model-details)
 
 Each run writes local `heads.joblib`, calibration and holdout predictions,
 and `metrics.json` with cutoffs, provenance, and per-class recall under
