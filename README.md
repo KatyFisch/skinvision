@@ -64,7 +64,8 @@ uv run --locked python -m demo
 The fitted MEL/NV and direct 11-class heads come with the checkout. On first
 launch, the demo downloads missing router and U-Net checkpoints from the
 `demo-checkpoints-v1` tag on `origin` using the same Git access as `git pull`.
-It stores the bundle under `data/checkpoints/` and reuses it on later runs.
+If the checkout already has the tag, the demo uses that copy. It stores the
+bundle under `data/checkpoints/` and reuses it on later runs.
 
 The demo also reuses the DermFM encoder downloaded by the training notebook.
 Keep `MILK10K_DATA_DIR` set to the same directory if you set it for the notebook.

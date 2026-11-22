@@ -34,8 +34,11 @@ class DemoModelAssetsTest(TestCase):
 
             with patch("demo.model_assets.CHECKPOINT_COMMIT", commit):
                 cache = download_checkpoints(checkout, data)
+                run(["git", "fetch", "-q", "origin", "tag", CHECKPOINT_TAG], cwd=checkout, check=True)
                 run(["git", "remote", "remove", "origin"], cwd=checkout, check=True)
                 self.assertEqual(download_checkpoints(checkout, data), cache)
+                local_cache = download_checkpoints(checkout, root / "local-data")
             for entry in CHECKPOINT_FILES:
                 self.assertEqual((cache / entry).read_text(), entry.as_posix())
+                self.assertEqual((local_cache / entry).read_text(), entry.as_posix())
             self.assertFalse((cache / ".git").exists())

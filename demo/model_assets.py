@@ -24,22 +24,24 @@ def download_checkpoints(repo: Path, data_dir: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=destination.parent) as staging:
         bundle = Path(staging) / "bundle"
-        print(f"Downloading SkinVision checkpoints ({CHECKPOINT_TAG}) from origin…", flush=True)
         try:
-            origin = run(["git", "remote", "get-url", "origin"], cwd=repo, check=True, capture_output=True, text=True, timeout=15)
+            local = run(
+                ["git", "rev-parse", "--verify", f"refs/tags/{CHECKPOINT_TAG}^{{commit}}"],
+                cwd=repo,
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            if local.returncode == 0 and local.stdout.strip() == CHECKPOINT_COMMIT:
+                source = repo.resolve().as_uri()
+                print(f"Preparing SkinVision checkpoints from local tag {CHECKPOINT_TAG}…", flush=True)
+            else:
+                origin = run(["git", "remote", "get-url", "origin"], cwd=repo, check=True, capture_output=True, text=True, timeout=15)
+                source = origin.stdout.strip()
+                print(f"Downloading SkinVision checkpoints ({CHECKPOINT_TAG}) from origin…", flush=True)
             run(
-                [
-                    "git",
-                    "clone",
-                    "--quiet",
-                    "--depth=1",
-                    "--single-branch",
-                    "--branch",
-                    CHECKPOINT_TAG,
-                    "--",
-                    origin.stdout.strip(),
-                    str(bundle),
-                ],
+                ["git", "clone", "--quiet", "--depth=1", "--single-branch", "--branch", CHECKPOINT_TAG, "--", source, str(bundle)],
                 cwd=repo,
                 check=True,
                 capture_output=True,
