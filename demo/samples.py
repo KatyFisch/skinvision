@@ -85,6 +85,16 @@ SAMPLES = (
         (285, 470, 441, 587),
     ),
     Sample(
+        "melanoma-close-up",
+        "Melanoma close-up",
+        "National Cancer Institute (9189)",
+        "Public domain in the U.S.",
+        "Melanoma_(4).jpg",
+        "b/bc/Melanoma_%284%29.jpg",
+        "90e8892253571fee5d48e267760a558a6d893a1f578fa2f2803c81111b277fd6",
+        (15, 108, 1395, 1143),
+    ),
+    Sample(
         "basal-cell-carcinoma",
         "Basal cell carcinoma",
         "National Cancer Institute (2164)",

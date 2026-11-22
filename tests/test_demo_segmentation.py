@@ -49,9 +49,10 @@ class DemoSegmentationTest(TestCase):
         with self.client.getresponse() as response:
             self.assertEqual(response.status, 200)
             samples = json.load(response)
-        self.assertEqual(len(samples), 9)
+        self.assertEqual(len(samples), 10)
         self.assertTrue(
-            {"Basal cell carcinoma", "Seborrheic keratosis", "Cherry angioma", "BCC on back"} <= {sample["title"] for sample in samples}
+            {"Basal cell carcinoma", "Seborrheic keratosis", "Cherry angioma", "BCC on back", "Melanoma close-up"}
+            <= {sample["title"] for sample in samples}
         )
         for sample in samples:
             with self.subTest(url=sample["url"]):
