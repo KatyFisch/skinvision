@@ -55,5 +55,26 @@ Pass a saved padded-crop directory to the demo with `--model`. The demo also
 accepts the existing ResNet cascade `model.json` and its referenced checkpoints.
 The direct 11-class model runs from the notebook.
 
+## Export the padded-crop heads to PyTorch
+
+From the repository root, export the three fitted heads and MEL cutoff from the
+same run the app uses.
+
+```sh
+uv run --locked python -m classifiers.export_padded_crop data/models/padded-crop models/mel-vs-nv-padded-crop.pth
+```
+
+Place the exported file under `models/` and open the
+[padded-crop Grad-CAM notebook](../notebooks/explain_padded_crop.ipynb) to make a
+prediction and visualize it. The notebook reuses the app's crop and requires
+the separate U-Net checkpoint and access to the
+[pinned DermFM-Zero-Open weights](https://huggingface.co/redlessone/DermFM-Zero).
+Each collaborator can download the encoder under their own Hugging Face
+account. The `.pth` contains the fitted heads and cutoff only.
+
+```sh
+uv run --locked jupyter lab --LabApp.extension_manager=readonly notebooks/explain_padded_crop.ipynb
+```
+
 See the [experiment record](../docs/classifier-experiments.md) for the results,
 selection rationale, and limits of the evaluation.

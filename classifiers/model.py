@@ -34,6 +34,29 @@ def predict_labels(scores: np.ndarray, labels: tuple[str, ...], cutoff: float) -
     return np.where(scores[:, melanoma] >= cutoff, "MEL", np.asarray(labels)[other_scores.argmax(axis=1)])
 
 
+def load_classifier_run(run_dir: Path, expected_task: Task | None = None) -> tuple[Task, float, list[Pipeline]]:
+    run_dir = run_dir.expanduser().resolve()
+    config = json.loads((run_dir / "metrics.json").read_text())
+    # The original padded-crop export has no task field.
+    task = config.get("task", "padded_crop")
+    if task not in TASK_LABELS or (expected_task is not None and task != expected_task):
+        raise ValueError(f"Unexpected classifier task: {task}")
+    if config.get("encoder", {}).get("sha256") != dermfm_zero.WEIGHTS_SHA256:
+        raise ValueError("Expected a model trained with the pinned DermFM-Zero-Open encoder")
+    if task == "padded_crop" and (
+        config.get("context_transforms", {}).get("padded_crop") != PADDED_CROP_SETTINGS
+        or config.get("empty_mask_policy") != "original_photo"
+    ):
+        raise ValueError("Expected a padded-crop run with the original-photo fallback")
+
+    cutoff = float(config["methods"][task]["cutoff"])
+    heads: list[Pipeline] = joblib.load(run_dir / "heads.joblib")[task]
+    expected_classes = (False, True) if task == "padded_crop" else TASK_LABELS[task]
+    if not 0 <= cutoff <= 1 or len(heads) != 3 or any(tuple(head.classes_) != expected_classes for head in heads):
+        raise ValueError("Expected a valid cutoff and three fitted heads with the saved task's labels")
+    return task, cutoff, heads
+
+
 class DermFMClassifier:
     def __init__(
         self,
@@ -44,27 +67,8 @@ class DermFMClassifier:
         expected_task: Task | None = None,
         segmentation_model: Path | None = None,
     ) -> None:
-        run_dir = run_dir.expanduser().resolve()
-        config = json.loads((run_dir / "metrics.json").read_text())
-        # The original padded-crop export has no task field.
-        task = config.get("task", "padded_crop")
-        if task not in TASK_LABELS or (expected_task is not None and task != expected_task):
-            raise ValueError(f"Unexpected classifier task: {task}")
-        if config.get("encoder", {}).get("sha256") != dermfm_zero.WEIGHTS_SHA256:
-            raise ValueError("Expected a model trained with the pinned DermFM-Zero-Open encoder")
-        if task == "padded_crop" and (
-            config.get("context_transforms", {}).get("padded_crop") != PADDED_CROP_SETTINGS
-            or config.get("empty_mask_policy") != "original_photo"
-        ):
-            raise ValueError("Expected a padded-crop run with the original-photo fallback")
-
-        self.task = task
-        self.labels = TASK_LABELS[task]
-        self.cutoff = float(config["methods"][task]["cutoff"])
-        self.heads: list[Pipeline] = joblib.load(run_dir / "heads.joblib")[task]
-        expected_classes = (False, True) if task == "padded_crop" else self.labels
-        if not 0 <= self.cutoff <= 1 or len(self.heads) != 3 or any(tuple(head.classes_) != expected_classes for head in self.heads):
-            raise ValueError("Expected a valid cutoff and three fitted heads with the saved task's labels")
+        self.task, self.cutoff, self.heads = load_classifier_run(run_dir, expected_task)
+        self.labels = TASK_LABELS[self.task]
         self.device = device
         self.preprocess = dermfm_zero.clinical_preprocess()
         self.encoder = dermfm_zero.load_clinical_encoder(data_dir, device)
