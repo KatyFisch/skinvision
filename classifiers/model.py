@@ -98,11 +98,12 @@ class DermFMClassifier:
             result["melanoma_score_band"] = melanoma_score_band(melanoma, self.cutoff)
         return result
 
-    def predict_other(self, photo: Image.Image) -> str:
-        """Pick the strongest diagnosis among the nine classes handled by the other branch."""
+    def predict_other(self, photo: Image.Image) -> tuple[str, float]:
+        """Return the leading other diagnosis and its original classifier score."""
         scores = self.score_photo(photo)
         other_indices = (index for index, label in enumerate(self.labels) if label not in {"MEL", "NV"})
-        return self.labels[max(other_indices, key=lambda index: scores[index])]
+        best = max(other_indices, key=lambda index: scores[index])
+        return self.labels[best], float(scores[best])
 
     def predict_file(self, path: Path) -> dict[str, str | float | None]:
         photo = load_rgb(path)

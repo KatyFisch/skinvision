@@ -94,7 +94,8 @@ class DemoHandler(BaseHTTPRequestHandler):
 
                 result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
                 if self.routing and has_mask and not self.routing[0].uses_specialist(photo):
-                    result.update(research_prediction=self.routing[1].predict_other(photo), route="OTHER", analysis_input="full_frame")
+                    diagnosis, score = self.routing[1].predict_other(photo)
+                    result.update(research_prediction=diagnosis, diagnosis_score=score, route="OTHER", analysis_input="full_frame")
                 elif self.padded_crop:
                     prepared = crop_with_skin_margin(photo, mask)
                     result.update(self.classifier.predict(prepared))

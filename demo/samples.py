@@ -84,6 +84,26 @@ SAMPLES = (
         "081a11358014caf6b9da259c63cd6e4044fc1b4d9a95ac05a10d62452f08e63c",
         (285, 470, 441, 587),
     ),
+    Sample(
+        "basal-cell-carcinoma",
+        "Basal cell carcinoma",
+        "National Cancer Institute (2164)",
+        "Public domain in the U.S.",
+        "Basal_cell_carcinoma_(2).jpg",
+        "c/cd/Basal_cell_carcinoma_%282%29.jpg",
+        "ee16e014de19516d0fd724b97ef13879aa3747bd5e908e03f047b03ba6bcff62",
+        (1116, 690, 2180, 1488),
+    ),
+    Sample(
+        "seborrheic-keratosis",
+        "Seborrheic keratosis",
+        "Lmbuga",
+        "Public domain",
+        "Queratose_seborreica_1.jpg",
+        "9/93/Queratose_seborreica_1.jpg",
+        "f82e58bca1fa0f2dee188393fc63339d9aa429edd20c34f4ef4784d7781630cd",
+        (0, 180, 552, 594),
+    ),
 )
 SAMPLE_ASSETS = {f"/samples/{sample.filename}": sample for sample in SAMPLES}
 

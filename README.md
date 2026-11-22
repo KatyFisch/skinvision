@@ -84,10 +84,12 @@ or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
 the 600 × 450 crop, and the preview traces the detected area. The classifier
 uses the lesion-centered crop with surrounding skin. When it returns MEL,
-the card shows **Possible melanoma**, **Moderate melanoma signal**, or
+the card shows **Inconclusive**, **Moderate melanoma signal**, or
 **Strong melanoma signal** according to the model's score band. Other
-predicted diagnoses appear as possible matches. The pulsing Grad-CAM overlay
-highlights stronger positive contributions inside the original U-Net outline.
+predicted diagnoses appear as possible matches. The browser console logs the
+raw melanoma score or the score for the highest-ranked other diagnosis. The
+pulsing Grad-CAM overlay highlights stronger positive contributions inside
+the original U-Net outline.
 It shows normalized heat above 0.30 and reaches at most 75% opacity. When the
 mask is empty, the demo prompts the user to adjust the crop.
 Processing stays in memory on your computer.
@@ -121,10 +123,10 @@ checkpoints referenced by that file at their saved relative paths. The cascade
 uses the black-background input and shows a melanoma outcome on its
 MEL-vs-NV branch.
 
-The five 600 × 450 **Sample photos** are included in
+The seven 600 × 450 **Sample photos** are included in
 [`demo/assets/demo-samples/`](demo/assets/demo-samples/) and available offline.
-The gallery lists each image's source, author, and license, including two
-melanoma examples from the National Cancer Institute. To regenerate the
+The gallery includes melanoma, nevi, basal cell carcinoma, and seborrheic
+keratosis, with each photo's source, author, and license. To regenerate the
 bundled crops from their verified sources, run
 `uv run --locked python -m demo.samples --data-dir demo/assets` from the repository root.
 

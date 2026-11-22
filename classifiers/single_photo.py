@@ -104,7 +104,7 @@ def routing_scores(models: list[RoutedResNet18], photos: torch.Tensor) -> tuple[
     fold_outputs = [model(photos) for model in models]
     route = torch.stack([router.sigmoid() for router, _ in fold_outputs]).mean(dim=0)
     other = torch.stack([diagnosis.softmax(dim=1) for _, diagnosis in fold_outputs]).mean(dim=0)
-    return route.cpu().numpy(), OTHER_CLASSES[other.argmax(dim=1).cpu().numpy()]
+    return route.cpu().numpy(), other.cpu().numpy()
 
 
 @torch.inference_mode()
@@ -146,7 +146,17 @@ class PhotoClassifier:
         if melanoma is not None and not math.isfinite(melanoma):
             raise RuntimeError("The specialist returned an invalid melanoma score")
         if melanoma is None:
-            return {"research_prediction": str(other[0]), "route": "OTHER", "melanoma_score": None, "melanoma_score_band": None}
+            best = int(other[0].argmax())
+            score = float(other[0, best])
+            if not math.isfinite(score):
+                raise RuntimeError("The other-diagnosis classifier returned an invalid score")
+            return {
+                "research_prediction": str(OTHER_CLASSES[best]),
+                "route": "OTHER",
+                "diagnosis_score": score,
+                "melanoma_score": None,
+                "melanoma_score_band": None,
+            }
         return {
             "research_prediction": "MEL" if melanoma >= self.cutoffs.specialist else "NV",
             "route": "MEL_OR_NV",

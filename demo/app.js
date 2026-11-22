@@ -1,5 +1,5 @@
 const melanomaHeadlines = {
-  low: 'Possible melanoma',
+  low: 'Inconclusive',
   moderate: 'Moderate melanoma signal',
   high: 'Strong melanoma signal',
 };
@@ -80,7 +80,8 @@ function predictionCopy(data) {
   if (diagnosis === 'MEL') {
     const band = data.melanoma_score_band;
     const signal = band === 'high' || band === 'moderate' ? band : 'low';
-    return { title: melanomaHeadlines[signal], description: `Some moles can look similar. ${biopsyNote}`, signal };
+    const detail = signal === 'low' ? 'The model found a weak melanoma signal.' : 'Some moles can look similar.';
+    return { title: melanomaHeadlines[signal], description: `${detail} ${biopsyNote}`, signal };
   }
   if (Object.hasOwn(diagnoses, diagnosis)) {
     return { title: `Possible ${diagnoses[diagnosis]}`, description: diagnosis === 'NV' ? biopsyNote : '' };
@@ -89,6 +90,15 @@ function predictionCopy(data) {
 }
 
 function showPrediction(data) {
+  if (Number.isFinite(data.melanoma_score)) {
+    console.info('[SkinVision] Raw melanoma score:', data.melanoma_score, {
+      band: data.melanoma_score_band,
+      input: data.analysis_input,
+    });
+  } else if (Number.isFinite(data.diagnosis_score)) {
+    console.info('[SkinVision] Raw diagnosis score:', data.research_prediction, data.diagnosis_score);
+  }
+
   if (data.heatmap) {
     const png = Uint8Array.from(atob(data.heatmap), (character) => character.charCodeAt(0));
     heatmapUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));

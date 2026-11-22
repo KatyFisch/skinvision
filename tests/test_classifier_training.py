@@ -108,4 +108,4 @@ class ClassifierTrainingTest(TestCase):
                         competing_scores[reloaded.labels.index("NV")] = 0.30
                         competing_scores[reloaded.labels.index("BCC")] = 0.20
                         with patch.object(reloaded, "score_photo", return_value=competing_scores):
-                            self.assertEqual(reloaded.predict_other(photo), "BCC")
+                            self.assertEqual(reloaded.predict_other(photo), ("BCC", 0.20))

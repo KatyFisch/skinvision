@@ -49,7 +49,9 @@ class DemoSegmentationTest(TestCase):
         with self.client.getresponse() as response:
             self.assertEqual(response.status, 200)
             samples = json.load(response)
-        self.assertEqual(len(samples), 5)
+        self.assertEqual(len(samples), 7)
+        self.assertIn("Basal cell carcinoma", {sample["title"] for sample in samples})
+        self.assertIn("Seborrheic keratosis", {sample["title"] for sample in samples})
         for sample in samples:
             with self.subTest(url=sample["url"]):
                 self.assertTrue(sample["credit"] and sample["license"] and sample["source"])
@@ -59,6 +61,7 @@ class DemoSegmentationTest(TestCase):
                     self.assertEqual(response.getheader("Content-Type"), "image/jpeg")
                     with Image.open(BytesIO(response.read())) as photo:
                         self.assertEqual(photo.size, self.photo.size)
+                        self.assertFalse(photo.getexif())
 
     def test_streams_outline_before_returning_prediction_on_the_same_mask(self) -> None:
         self.start_client()
@@ -139,7 +142,7 @@ class DemoSegmentationTest(TestCase):
     def test_other_branch_uses_the_full_photo_and_skips_the_specialist(self) -> None:
         router, other = Mock(), Mock()
         router.uses_specialist.return_value = False
-        other.predict_other.return_value = "BCC"
+        other.predict_other.return_value = ("BCC", 0.23145678)
         self.start_client(padded_crop=True, routing=(router, other))
         self.photo.paste((210, 25, 40), (220, 170, 255, 190))
         self.mask.paste(255, (220, 170, 255, 190))
@@ -148,7 +151,8 @@ class DemoSegmentationTest(TestCase):
         with self.client.getresponse() as response:
             self.assertTrue(json.loads(response.readline())["outline"])
             self.assertEqual(
-                json.loads(response.readline()), {"research_prediction": "BCC", "route": "OTHER", "analysis_input": "full_frame"}
+                json.loads(response.readline()),
+                {"research_prediction": "BCC", "diagnosis_score": 0.23145678, "route": "OTHER", "analysis_input": "full_frame"},
             )
         other.predict_other.assert_called_once()
         self.assertIsNone(ImageChops.difference(other.predict_other.call_args.args[0], self.photo).getbbox())
