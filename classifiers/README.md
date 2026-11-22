@@ -48,32 +48,32 @@ keeps the aspect ratio.
 Each saved directory contains `heads.joblib`, `metrics.json`, and calibration
 and holdout predictions. The notebook reloads the heads with the pinned
 DermFM-Zero-Open weights. Padded-crop inference also needs the U-Net checkpoint.
-Keep training data, outputs, and weights local. Load model bundles from trusted
-sources.
+Keep the raw data, training outputs, and downloaded encoder weights local.
+Load model bundles from trusted sources.
 
 Pass a saved padded-crop directory to the demo with `--model`. The demo also
 accepts the existing ResNet cascade `model.json` and its referenced checkpoints.
 The direct 11-class model runs from the notebook.
 
-## Export the padded-crop heads to PyTorch
+## Explain a padded-crop prediction
 
-From the repository root, export the three fitted heads and MEL cutoff from the
-same run the app uses.
-
-```sh
-uv run --locked python -m classifiers.export_padded_crop data/models/padded-crop models/mel-vs-nv-padded-crop.pth
-```
-
-Place the exported file under `models/` and open the
-[padded-crop Grad-CAM notebook](../notebooks/explain_padded_crop.ipynb) to make a
-prediction and visualize it. The notebook reuses the app's crop and requires
-the separate U-Net checkpoint and access to the
+The [padded-crop Grad-CAM notebook](../notebooks/explain_padded_crop.ipynb)
+loads the three fitted heads and MEL cutoff from the checked-in
+`models/mel-vs-nv-padded-crop.pth`. It reuses the app's crop and requires the
+local U-Net checkpoint and access to the
 [pinned DermFM-Zero-Open weights](https://huggingface.co/redlessone/DermFM-Zero).
 Each collaborator can download the encoder under their own Hugging Face
-account. The `.pth` contains the fitted heads and cutoff only.
+account.
 
 ```sh
 uv run --locked jupyter lab --LabApp.extension_manager=readonly notebooks/explain_padded_crop.ipynb
+```
+
+To update the shared heads from a new padded-crop run, export the fitted heads
+and cutoff from the repository root.
+
+```sh
+uv run --locked python -m classifiers.export_padded_crop data/models/padded-crop models/mel-vs-nv-padded-crop.pth
 ```
 
 See the [experiment record](../docs/classifier-experiments.md) for the results,

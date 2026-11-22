@@ -67,6 +67,8 @@ data/*
 /models/unet_segmentation_full/
 *.pt
 *.pth
+# The padded-crop Grad-CAM notebook ships with the fitted classifier heads.
+!/models/mel-vs-nv-padded-crop.pth
 *.ckpt
 *.onnx
 *.h5
