@@ -140,6 +140,45 @@ MILK10k close-ups are clinic photos. This run measures how the pipeline
 works on those photos. Independent evaluation on self-taken photos and
 clinical review are needed before using it for people's skin concerns.
 
+## Compare masking for MEL-vs-NV
+
+```sh
+uv run --locked python -m classifiers.compare_masked_mel_nv --segmentation-model models/unet_segmentation_full.pth
+```
+
+Use the same U-Net checkpoint as the demo. For each native 600 × 450 MILK10k
+clinical photo of a melanoma or nevus, compare its original pixels with the
+demo's black-background composite from the predicted mask. Both variants use
+frozen DermFM-Zero-Open features and the same logistic regression recipe. Both
+train on the same development lesions with nonempty masks. Each uses the
+three-member ensemble to set a cutoff on the same 189 calibration lesions,
+then scores the original 239-lesion holdout. Empty masks count as inconclusive
+in the masked variant and stay in the end-to-end denominators.
+
+| Input | Holdout melanomas flagged | Holdout nevi correctly labeled NV | Inconclusive |
+| --- | ---: | ---: | ---: |
+| Original clinical photo | 86/90 (95.6%) | 22/149 (14.8%) | 0 |
+| Black background outside the predicted mask | 78/90 (86.7%) | 15/149 (10.1%) | 21 |
+
+The U-Net produced empty masks for 86 of 1,196 lesions across all splits,
+including seven melanomas and 14 nevi on the holdout. That limits the masked
+pipeline's holdout sensitivity to 83 of 90 even with perfect scoring on
+nonempty masks. On the shared subset with nonempty masks, compare the heads
+at the same 79 of 83 flagged melanomas. The original photos cleared 19 of
+135 nevi and the masked photos cleared 15. These cutoffs use holdout labels
+for a retrospective comparison.
+
+Use original pixels for the classifier candidate in the private demo. The
+segmentation overlay can still show the predicted lesion. The U-Net was
+trained on ISIC 2017 dermoscopy according to the segmentation notebook.
+An earlier cross-dataset image screen found no suspected ISIC 2017 match in
+these held-out lesions among the cases it screened. Mask quality and classifier
+performance on self-taken photos need their own evaluation.
+
+Runs save the metrics, heads, mask coverage, masked photos, and predictions
+under `data/experiments/masked-mel-nv/`. The original DermFM-Zero-Open feature
+cache can be reused.
+
 ## Compare three single-photo classifier designs
 
 ```sh

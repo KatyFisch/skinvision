@@ -121,6 +121,11 @@ between datasets.
 
 ## 5. Test the phone-photo workflow and build a private demo
 
+- For the two-label MEL-vs-NV demo, use the original clinical crop as the
+  classifier input. Blacking out the background with the demo U-Net reduced
+  holdout melanoma recall and nevus specificity, with seven empty masks among
+  90 holdout melanomas. Keep segmentation available as a visible overlay.
+  [Masked versus original clinical photos](classifiers/README.md#compare-masking-for-mel-vs-nv)
 - The [single-photo pipeline](classifiers/README.md#run-the-single-photo-pipeline)
   uses clinical-only MILK10k models for all three stages. The first holdout
   run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked
