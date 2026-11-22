@@ -32,7 +32,22 @@
             <p>or drop or paste an image here</p>
             <small>JPEG or PNG · up to 20 MB</small>
           </div>
-          <img id="preview" alt="Preview of the selected photo" hidden>
+          <div class="crop-frame" id="crop-frame" hidden>
+            <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
+            <div class="crop-grid" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="crop-controls" id="crop-controls" hidden>
+          <div class="crop-meta">
+            <p id="crop-help">Drag the photo or use arrow keys to frame it.</p>
+            <span>600 × 450 px</span>
+          </div>
+          <div class="crop-tools">
+            <label for="crop-zoom">Zoom</label>
+            <input id="crop-zoom" type="range" min="100" max="400" value="100" aria-valuetext="100%">
+            <span id="crop-zoom-value" aria-hidden="true">100%</span>
+            <button class="button quiet" id="reset-crop" type="button">Reset crop</button>
+          </div>
         </div>
         <div class="file-row" id="file-row" hidden>
           <span id="file-name"></span>
