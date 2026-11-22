@@ -20,6 +20,9 @@ Open [the local demo](http://127.0.0.1:8765) and pick a sample photo. On the fir
 run, the demo also fetches the router and U-Net checkpoints using your Git access
 to this repository.
 
+[Watch the demo (MP4)](docs/skinvision-demo.mp4) to see the app analyze
+**Melanoma close-up** and **Cherry angioma**.
+
 For training, download the images, metadata, supplemental metadata, and ground
 truth from [ISIC’s MILK10k downloads](https://challenge.isic-archive.com/data/#milk10k).
 Put the extracted `MILK10k_Training_Input/` folder and all three CSVs directly
@@ -61,5 +64,7 @@ Run the cells in order to train, evaluate, and save the model.
 - Codella et al. [ISIC 2017 Challenge](https://arxiv.org/abs/1710.05006).
 - Yan et al. [DermFM-Zero](https://arxiv.org/abs/2602.10624) and
   [PanDerm](https://doi.org/10.1038/s41591-025-03747-y).
-- The demo credits its sample photos in the gallery. Diagnosis descriptions
-  summarize Wikipedia articles and use the [MILK10k categories](https://challenge.isic-archive.com/landing/milk10k/).
+- The demo and video use cropped photos with sources, authors, and licenses
+  listed in the [sample catalog](demo/samples.py). Diagnosis descriptions
+  summarize Wikipedia articles and use the
+  [MILK10k categories](https://challenge.isic-archive.com/landing/milk10k/).
