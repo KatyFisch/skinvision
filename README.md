@@ -124,7 +124,7 @@ checkpoints referenced by that file at their saved relative paths. The cascade
 uses the black-background input and shows a melanoma outcome on its
 MEL-vs-NV branch.
 
-The ten 600 × 450 **Sample photos** are included in
+The nine 600 × 450 **Sample photos** are included in
 [`demo/assets/demo-samples/`](demo/assets/demo-samples/) and available offline.
 The gallery shows each photo's source, author, and license. At default framing,
 **Melanoma close-up** produces a **high risk** result, while **Cherry angioma**

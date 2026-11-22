@@ -105,16 +105,6 @@ SAMPLES = (
         (1116, 690, 2180, 1488),
     ),
     Sample(
-        "seborrheic-keratosis",
-        "Seborrheic keratosis",
-        "Lmbuga",
-        "Public domain",
-        "Queratose_seborreica_1.jpg",
-        "9/93/Queratose_seborreica_1.jpg",
-        "f82e58bca1fa0f2dee188393fc63339d9aa429edd20c34f4ef4784d7781630cd",
-        (0, 180, 552, 594),
-    ),
-    Sample(
         "cherry-angioma",
         "Cherry angioma",
         "JOAN",
