@@ -3,7 +3,7 @@
 SkinVision explores possible skin lesion diagnoses from phone photos.\
 The local demo shows classifier predictions on curated examples.
 
-[![Watch SkinVision analyze Melanoma close-up and BCC on back](docs/skinvision-demo.webp)](docs/skinvision-demo.mp4)
+<https://github.com/user-attachments/assets/1a37cb33-6a45-4515-b219-e24a6088547f>
 
 ## Set up
 
