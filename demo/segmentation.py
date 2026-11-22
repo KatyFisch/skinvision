@@ -18,7 +18,7 @@ from torchvision.models.resnet import BasicBlock
 from classifiers.encoders import build_preprocess
 
 SEGMENTATION_SIZE = (512, 384)
-BACKGROUND_ALPHA = 75
+BACKGROUND_ALPHA = round(255 * 0.85)
 NORMALIZE = build_preprocess("resnet18", full_frame=True, native_resolution=True)
 
 # The notebook also exports a serialized U-Net. Limit that loader to the

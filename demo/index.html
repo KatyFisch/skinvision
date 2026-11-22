@@ -36,7 +36,7 @@
             <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
             <img class="mask-overlay" id="mask-overlay" alt="" aria-hidden="true">
             <div class="crop-grid" aria-hidden="true"></div>
-            <div class="mask-scan" aria-hidden="true"></div>
+            <div class="mask-scan" aria-hidden="true"><div class="mask-scan-line" id="mask-scan-line"></div></div>
           </div>
         </div>
         <div class="crop-controls" id="crop-controls" hidden>
@@ -71,7 +71,10 @@
               <p>Choose a photo and run analysis to see the predicted label and classifier branch.</p>
             </div>
             <div id="result-loading" class="result-placeholder" hidden>
-              <span class="spinner" aria-hidden="true"></span>
+              <div class="analysis-activity" aria-hidden="true">
+                <span class="spinner"></span>
+                <span class="analysis-percent" id="analysis-percent" hidden></span>
+              </div>
               <p id="result-progress">Finding the lesion area…</p>
             </div>
             <div id="result-done" class="result-done" hidden>

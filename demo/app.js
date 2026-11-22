@@ -19,6 +19,7 @@ const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('previ
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
 const maskOverlay = /** @type {HTMLImageElement} */ (document.getElementById('mask-overlay'));
+const maskScanLine = document.getElementById('mask-scan-line');
 const cropControls = document.getElementById('crop-controls');
 const cropZoom = /** @type {HTMLInputElement} */ (document.getElementById('crop-zoom'));
 const cropZoomValue = document.getElementById('crop-zoom-value');
@@ -32,6 +33,7 @@ const analyzeIcon = document.getElementById('analyze-icon');
 const resultIdle = document.getElementById('result-idle');
 const resultLoading = document.getElementById('result-loading');
 const resultProgress = document.getElementById('result-progress');
+const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultEmpty = document.getElementById('result-empty');
 
@@ -53,6 +55,7 @@ function showResult(state) {
   resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
   resultEmpty.hidden = state !== 'empty';
+  analysisPercent.hidden = state !== 'classifying';
   if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the masked crop…';
   analyze.setAttribute('aria-disabled', String(!photo || busy));
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
@@ -249,15 +252,18 @@ async function* analysisEvents(body) {
   }
 }
 
-async function revealMask(encoded, pending) {
+function finishAnimations(element) {
+  return Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+}
+
+async function revealMask(encoded, pending, scanFinished) {
   const png = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
   overlayUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
   maskOverlay.src = overlayUrl;
-  await maskOverlay.decode();
+  await Promise.all([maskOverlay.decode(), scanFinished]);
   if (request !== pending) return;
   cropFrame.classList.replace('is-segmenting', 'has-mask');
-  showResult('classifying');
-  await Promise.allSettled(maskOverlay.getAnimations().map((animation) => animation.finished));
+  await finishAnimations(maskOverlay);
 }
 
 analyze.addEventListener('click', async () => {
@@ -268,6 +274,8 @@ analyze.addEventListener('click', async () => {
   clearOverlay();
   cropFrame.classList.add('is-segmenting');
   showResult('segmenting');
+  const scanFinished = finishAnimations(maskScanLine);
+  let countFinished;
 
   try {
     /** @type {Blob | null} */
@@ -287,10 +295,15 @@ analyze.addEventListener('click', async () => {
       if (request !== pending) return;
       if (data.error) throw new Error(data.error);
       if (data.overlay) {
-        await revealMask(data.overlay, pending);
+        await revealMask(data.overlay, pending, scanFinished);
+        if (request !== pending) return;
+        showResult('classifying');
+        countFinished = finishAnimations(analysisPercent);
         continue;
       }
 
+      await countFinished;
+      if (request !== pending) return;
       if (data.research_prediction === null) {
         showResult('empty');
       } else {

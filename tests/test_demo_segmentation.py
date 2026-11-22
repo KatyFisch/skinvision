@@ -50,7 +50,7 @@ class DemoSegmentationTest(TestCase):
             event = json.loads(response.readline())
             with Image.open(BytesIO(b64decode(event["overlay"]))) as overlay:
                 self.assertEqual(overlay.size, self.photo.size)
-                self.assertEqual(overlay.getpixel((10, 10)), (0, 0, 0, 75))
+                self.assertEqual(overlay.getpixel((10, 10)), (0, 0, 0, 217))
                 self.assertEqual(overlay.getpixel((250, 180)), (0, 0, 0, 0))
                 self.assertIsNone(
                     ImageChops.difference(overlay.getchannel("A").point(lambda value: 0 if value else 255), self.mask).getbbox()
@@ -71,5 +71,5 @@ class DemoSegmentationTest(TestCase):
         self.assertIsNone(result["research_prediction"])
         self.assertIsNone(result["route"])
         with Image.open(BytesIO(b64decode(result["overlay"]))) as overlay:
-            self.assertEqual(overlay.getchannel("A").getextrema(), (75, 75))
+            self.assertEqual(overlay.getchannel("A").getextrema(), (217, 217))
         self.classifier.predict.assert_not_called()
