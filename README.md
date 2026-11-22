@@ -59,12 +59,25 @@ Run the cells in order to train, evaluate, and save the model.
 
 ## Attribution
 
-- MILK study team. [MILK10k](https://doi.org/10.34970/648456) and
-  [MILK10k Benchmark](https://doi.org/10.34970/262082). ISIC Archive, 2025.
-- Codella et al. [ISIC 2017 Challenge](https://arxiv.org/abs/1710.05006).
-- Yan et al. [DermFM-Zero](https://arxiv.org/abs/2602.10624) and
-  [PanDerm](https://doi.org/10.1038/s41591-025-03747-y).
-- The demo and video use cropped photos with sources, authors, and licenses
-  listed in the [sample catalog](demo/samples.py). Diagnosis descriptions
-  summarize Wikipedia articles and use the
+- MILK study team. [MILK10k](https://doi.org/10.34970/648456). ISIC Archive, 2025.
+  MILK study team. [MILK10k Benchmark](https://doi.org/10.34970/262082).
+  ISIC Archive, 2025. Both use
+  [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+  The legacy Grad-CAM notebook adds model overlays to a dataset photo.
+  [Dataset paper by Tschandl et al.](https://doi.org/10.1016/j.jid.2025.06.1594)
+- We crop and resize images and masks from the
+  [ISIC 2017 Challenge](https://challenge.isic-archive.com/data/#2017)
+  ([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)).
+  [Challenge paper by Codella et al.](https://arxiv.org/abs/1710.05006)
+- Our classifiers use frozen DermFM-Zero-Open features. The
+  [Hugging Face checkpoint terms](https://huggingface.co/redlessone/DermFM-Zero#intended-use-and-license)
+  specify [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)
+  for noncommercial academic research and restrict redistribution of weights
+  and derivative checkpoints. [DermFM-Zero paper](https://arxiv.org/abs/2602.10624),
+  [PanDerm paper](https://doi.org/10.1038/s41591-025-03747-y).
+- The demo and video use cropped and resized photos from the
+  [sample catalog](demo/samples.py), including
+  [Cherry angioma by JOAN](https://commons.wikimedia.org/wiki/File:Angioma_cereza_en_hombro.jpg)
+  ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)).
+  Diagnosis descriptions summarize Wikipedia articles and use the
   [MILK10k categories](https://challenge.isic-archive.com/landing/milk10k/).
