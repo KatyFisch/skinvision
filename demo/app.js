@@ -18,7 +18,7 @@ const choose = document.getElementById('choose');
 const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('preview'));
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
-const maskOverlay = /** @type {HTMLImageElement} */ (document.getElementById('mask-overlay'));
+const lesionPath = document.getElementById('lesion-path');
 const maskScanLine = document.getElementById('mask-scan-line');
 const cropControls = document.getElementById('crop-controls');
 const cropZoom = /** @type {HTMLInputElement} */ (document.getElementById('crop-zoom'));
@@ -42,7 +42,6 @@ let selection = 0;
 let crop;
 let drag;
 let request;
-let overlayUrl;
 
 function showError(message = '') {
   error.textContent = message;
@@ -63,17 +62,15 @@ function showResult(state) {
   analyzeIcon.hidden = busy;
 }
 
-function clearOverlay() {
-  cropFrame.classList.remove('is-segmenting', 'has-mask');
-  if (overlayUrl) URL.revokeObjectURL(overlayUrl);
-  overlayUrl = undefined;
-  maskOverlay.removeAttribute('src');
+function clearOutline() {
+  cropFrame.classList.remove('is-segmenting', 'has-outline');
+  lesionPath.removeAttribute('d');
 }
 
 function clearAnalysis() {
   request?.abort();
   request = undefined;
-  clearOverlay();
+  clearOutline();
   showError();
   showResult('idle');
 }
@@ -256,14 +253,14 @@ function finishAnimations(element) {
   return Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
 }
 
-async function revealMask(encoded, pending, scanFinished) {
-  const png = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
-  overlayUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
-  maskOverlay.src = overlayUrl;
-  await Promise.all([maskOverlay.decode(), scanFinished]);
+async function revealOutline(path, pending, scanFinished) {
+  await scanFinished;
   if (request !== pending) return;
-  cropFrame.classList.replace('is-segmenting', 'has-mask');
-  await finishAnimations(maskOverlay);
+  cropFrame.classList.remove('is-segmenting');
+  if (!path) return;
+  lesionPath.setAttribute('d', path);
+  cropFrame.classList.add('has-outline');
+  await finishAnimations(lesionPath);
 }
 
 analyze.addEventListener('click', async () => {
@@ -271,7 +268,7 @@ analyze.addEventListener('click', async () => {
   const pending = new AbortController();
   request = pending;
   showError();
-  clearOverlay();
+  clearOutline();
   cropFrame.classList.add('is-segmenting');
   showResult('segmenting');
   const scanFinished = finishAnimations(maskScanLine);
@@ -294,8 +291,8 @@ analyze.addEventListener('click', async () => {
     for await (const data of analysisEvents(response.body)) {
       if (request !== pending) return;
       if (data.error) throw new Error(data.error);
-      if (data.overlay) {
-        await revealMask(data.overlay, pending, scanFinished);
+      if (typeof data.outline === 'string') {
+        await revealOutline(data.outline, pending, scanFinished);
         if (request !== pending) return;
         showResult('classifying');
         countFinished = finishAnimations(analysisPercent);

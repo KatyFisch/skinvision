@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 
+import numpy as np
 import segmentation_models_pytorch as smp
 import torch
 from PIL import Image
@@ -12,6 +13,7 @@ from segmentation_models_pytorch.base.heads import SegmentationHead
 from segmentation_models_pytorch.base.modules import Activation, Attention, Conv2dReLU
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder, UnetDecoderBlock
 from segmentation_models_pytorch.encoders.resnet import ResNetEncoder
+from skimage.measure import approximate_polygon, find_contours
 from torch import nn
 from torchvision.models.resnet import BasicBlock
 
@@ -85,3 +87,14 @@ def overlay_png(mask: Image.Image) -> str:
     with BytesIO() as buffer:
         overlay.save(buffer, format="PNG")
         return b64encode(buffer.getvalue()).decode("ascii")
+
+
+def outline_path(mask: Image.Image) -> str:
+    # Padding closes contours that touch the crop edge.
+    padded = np.pad(np.asarray(mask), 1)
+    paths = []
+    for contour in find_contours(padded, level=127.5, fully_connected="high"):
+        polygon = approximate_polygon(contour, tolerance=0.35)
+        points = " ".join(f"{column - 0.5:g},{row - 0.5:g}" for row, column in polygon[:-1])
+        paths.append(f"M{points}Z")
+    return "".join(paths)

@@ -32,14 +32,15 @@ class DemoSegmentationTest(TestCase):
             self.photo.save(buffer, format="PNG")
             self.client.request("POST", "/api/predict", buffer.getvalue(), {"Content-Type": "application/octet-stream", "Accept": accept})
 
-    def test_streams_overlay_before_returning_prediction_on_the_same_mask(self) -> None:
+    def test_streams_outline_before_returning_prediction_on_the_same_mask(self) -> None:
         self.mask.paste(255, (200, 120, 390, 290))
+        self.mask.paste(255, (0, 20, 18, 40))
         release_classifier = Event()
         self.addCleanup(release_classifier.set)
 
         def predict(_image: Image.Image) -> dict[str, str]:
             if not release_classifier.wait(timeout=5):
-                raise RuntimeError("Client did not receive the overlay before classification finished")
+                raise RuntimeError("Client did not receive the outline before classification finished")
             return {"research_prediction": "NV", "route": "MEL_OR_NV"}
 
         self.classifier.predict.side_effect = predict
@@ -48,6 +49,14 @@ class DemoSegmentationTest(TestCase):
         with self.client.getresponse() as response:
             self.assertEqual(response.getheader("Content-Type"), ANALYSIS_STREAM)
             event = json.loads(response.readline())
+            outlines = event["outline"].removesuffix("Z").split("Z")
+            self.assertEqual(len(outlines), 2)
+            bounds = []
+            for outline in outlines:
+                self.assertTrue(outline.startswith("M"))
+                xs, ys = zip(*(map(float, point.split(",")) for point in outline[1:].split()), strict=True)
+                bounds.append((min(xs), min(ys), max(xs), max(ys)))
+            self.assertEqual(sorted(bounds), [(0, 20, 18, 40), (200, 120, 390, 290)])
             with Image.open(BytesIO(b64decode(event["overlay"]))) as overlay:
                 self.assertEqual(overlay.size, self.photo.size)
                 self.assertEqual(overlay.getpixel((10, 10)), (0, 0, 0, 217))
@@ -72,4 +81,8 @@ class DemoSegmentationTest(TestCase):
         self.assertIsNone(result["route"])
         with Image.open(BytesIO(b64decode(result["overlay"]))) as overlay:
             self.assertEqual(overlay.getchannel("A").getextrema(), (217, 217))
+        self.send_photo(ANALYSIS_STREAM)
+        with self.client.getresponse() as response:
+            self.assertEqual(json.loads(response.readline())["outline"], "")
+            self.assertEqual(json.loads(response.readline()), {"research_prediction": None, "route": None})
         self.classifier.predict.assert_not_called()

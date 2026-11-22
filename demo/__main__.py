@@ -15,7 +15,7 @@ import torch
 from PIL import Image, ImageOps
 
 from classifiers.single_photo import PhotoClassifier
-from demo.segmentation import LesionSegmenter, overlay_png
+from demo.segmentation import LesionSegmenter, outline_path, overlay_png
 
 ROOT = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -66,7 +66,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                 mask = self.segmenter.mask(photo)
                 overlay = overlay_png(mask)
                 if stream:
-                    self.send_event({"overlay": overlay})
+                    self.send_event({"overlay": overlay, "outline": outline_path(mask)})
 
                 result: dict[str, str | None] = {"research_prediction": None, "route": None}
                 if mask.getbbox() is not None:

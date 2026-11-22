@@ -34,7 +34,16 @@
           </div>
           <div class="crop-frame" id="crop-frame" hidden>
             <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
-            <img class="mask-overlay" id="mask-overlay" alt="" aria-hidden="true">
+            <svg class="lesion-outline" viewBox="0 0 600 450" aria-hidden="true">
+              <defs>
+                <linearGradient id="lesion-gradient" x1="0%" y1="28%" x2="100%" y2="72%">
+                  <stop offset="0%"/>
+                  <stop offset="48%"/>
+                  <stop offset="100%"/>
+                </linearGradient>
+              </defs>
+              <path id="lesion-path" pathLength="1" fill="none" stroke="url(#lesion-gradient)" vector-effect="non-scaling-stroke"/>
+            </svg>
             <div class="crop-grid" aria-hidden="true"></div>
             <div class="mask-scan" aria-hidden="true"><div class="mask-scan-line" id="mask-scan-line"></div></div>
           </div>

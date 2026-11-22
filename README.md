@@ -52,7 +52,7 @@ uv run --locked python -m demo --model data/experiments/single-photo/20261121T20
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
-the 600 × 450 crop. The preview dims the background before showing the result.
+the 600 × 450 crop. The preview traces the detected area before showing the result.
 The classifier runs on the same crop with that background set to black. If the
 mask is empty, the demo asks for another crop. Processing stays in memory on
 your computer.
