@@ -97,7 +97,7 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .result-mark { width: 33px; height: 30px; background: linear-gradient(var(--green), var(--green)) 0 5px / 28px 1px no-repeat, linear-gradient(var(--green), var(--green)) 0 14px / 19px 1px no-repeat, linear-gradient(var(--green), var(--green)) 0 23px / 24px 1px no-repeat; opacity: .54; }
 .analysis-activity { display: flex; align-items: center; gap: 12px; min-height: 36px; }
 .spinner { width: 23px; height: 23px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
-.analysis-percent { color: var(--green); font: 500 36px/1 var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.045em; counter-reset: analysis-percent var(--analysis-percent); animation: count-analysis 2500ms cubic-bezier(.4, 0, .28, 1) both; }
+.analysis-percent { color: var(--green); font: 500 36px/1 var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.045em; counter-reset: analysis-percent var(--analysis-percent); animation: count-analysis 2500ms ease-in both; }
 .analysis-percent::after { content: counter(analysis-percent) '%'; }
 .result-done { padding-top: 16px; animation: appear 170ms var(--ease-out); }
 .result-code { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; }
