@@ -46,6 +46,7 @@ const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultEmpty = document.getElementById('result-empty');
 const resultBand = document.getElementById('result-band');
+const resultCropNote = document.getElementById('result-crop-note');
 const scoreSegments = resultBand.querySelectorAll('[data-score-band]');
 
 let photo;
@@ -89,11 +90,8 @@ function showPrediction(data) {
     heatmapNote.hidden = false;
   }
   const bandLabel = melanomaBands[data.melanoma_score_band];
-  document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
   document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
-  const taskLabel = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
-  document.querySelector('#result-route').textContent =
-    data.analysis_input === 'original_photo' ? `${taskLabel} · original crop used` : taskLabel;
+  resultCropNote.hidden = data.analysis_input !== 'original_photo';
   resultBand.hidden = !bandLabel;
   if (bandLabel) {
     scoreSegments.forEach((segment) => {

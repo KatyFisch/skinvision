@@ -87,7 +87,6 @@
               <p id="result-progress">Finding the lesion area…</p>
             </div>
             <div id="result-done" class="result-done" hidden>
-              <p class="result-code" id="result-code"></p>
               <p class="result-label" id="result-label"></p>
               <div class="score-band-scale" id="result-band" aria-hidden="true" hidden>
                 <span data-score-band="below"></span>
@@ -95,11 +94,11 @@
                 <span data-score-band="moderate"></span>
                 <span data-score-band="high"></span>
               </div>
-              <dl class="result-details"><dt>Classifier</dt><dd id="result-route"></dd></dl>
+              <p class="result-note" id="result-crop-note" hidden>Original crop used.</p>
             </div>
             <div id="result-empty" class="result-done" hidden>
               <p class="result-label">No lesion area found</p>
-              <p class="result-empty-help">Adjust the crop so it includes the whole lesion and try again.</p>
+              <p class="result-note">Adjust the crop so it includes the whole lesion and try again.</p>
             </div>
           </div>
         </section>
