@@ -1,22 +1,24 @@
-const labels = {
-  AKIEC: 'Actinic keratosis or intraepidermal carcinoma',
-  BCC: 'Basal cell carcinoma',
-  BEN_OTH: 'Other benign growths',
-  BKL: 'Benign keratinocytic lesion',
-  DF: 'Dermatofibroma',
-  INF: 'Inflammatory or infectious conditions',
-  MAL_OTH: 'Other malignant growths',
-  MEL: 'Melanoma',
-  NV: 'Mole (melanocytic nevus)',
-  SCCKA: 'Squamous cell carcinoma or keratoacanthoma',
-  VASC: 'Blood vessel lesions or bleeding',
+const melanomaOutcomes = {
+  below: 'low',
+  low: 'inconclusive',
+  moderate: 'inconclusive',
+  high: 'high',
 };
 
-const melanomaBands = {
-  below: 'Below melanoma cutoff',
-  low: 'Low melanoma signal',
-  moderate: 'Moderate melanoma signal',
-  high: 'High melanoma signal',
+const outcomes = {
+  high: {
+    title: 'high risk',
+    description:
+      'The research model found a strong melanoma signal. Some moles can look similar. Only a biopsy can give conclusive results.',
+  },
+  inconclusive: {
+    title: 'inconclusive',
+    description: 'The research model found some melanoma signal, but the result was unclear. Only a biopsy can give conclusive results.',
+  },
+  low: {
+    title: 'low',
+    description: 'The research model found little evidence of melanoma in this photo. Only a biopsy can give conclusive results.',
+  },
 };
 
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
@@ -41,13 +43,10 @@ const analyzeLabel = document.getElementById('analyze-label');
 const analyzeIcon = document.getElementById('analyze-icon');
 const resultIdle = document.getElementById('result-idle');
 const resultLoading = document.getElementById('result-loading');
-const resultProgress = document.getElementById('result-progress');
 const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
-const resultEmpty = document.getElementById('result-empty');
-const resultBand = document.getElementById('result-band');
-const resultCropNote = document.getElementById('result-crop-note');
-const scoreSegments = resultBand.querySelectorAll('[data-score-band]');
+const resultLabel = document.getElementById('result-label');
+const resultDescription = document.getElementById('result-description');
 
 let photo;
 let selectedSample;
@@ -68,9 +67,7 @@ function showResult(state) {
   resultIdle.hidden = state !== 'idle';
   resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
-  resultEmpty.hidden = state !== 'empty';
   analysisPercent.hidden = state !== 'classifying';
-  if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the crop…';
   analyze.setAttribute('aria-disabled', String(!photo || busy));
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
@@ -89,15 +86,19 @@ function showPrediction(data) {
     heatmapNote.textContent = 'No strong Grad-CAM activations inside the lesion outline';
     heatmapNote.hidden = false;
   }
-  const bandLabel = melanomaBands[data.melanoma_score_band];
-  document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
-  resultCropNote.hidden = data.analysis_input !== 'original_photo';
-  resultBand.hidden = !bandLabel;
-  if (bandLabel) {
-    scoreSegments.forEach((segment) => {
-      segment.classList.toggle('is-active', segment.getAttribute('data-score-band') === data.melanoma_score_band);
-    });
+  const missingLesion = data.analysis_input === 'original_photo' || data.research_prediction === null;
+  const scoredOutcome = melanomaOutcomes[data.melanoma_score_band];
+  const outcome = missingLesion ? 'inconclusive' : (scoredOutcome ?? 'inconclusive');
+  const { title, description } = outcomes[outcome];
+  let explanation = description;
+  if (missingLesion) {
+    explanation = 'The model could not find a lesion in this crop. Adjust the framing to include the whole lesion and try again.';
+  } else if (!scoredOutcome) {
+    explanation = 'The model did not return a melanoma score for this crop.';
   }
+  resultDone.dataset.outcome = outcome;
+  resultLabel.textContent = title;
+  resultDescription.textContent = explanation;
   showResult('done');
 }
 
@@ -404,11 +405,7 @@ analyze.addEventListener('click', async () => {
       resultLoading.classList.add('is-fading');
       await finishAnimations(resultLoading);
       if (request !== pending) return;
-      if (data.research_prediction === null) {
-        showResult('empty');
-      } else {
-        showPrediction(data);
-      }
+      showPrediction(data);
       return;
     }
     throw new Error('Analysis ended early. Try again.');

@@ -80,16 +80,18 @@ Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
 the 600 × 450 crop, and the preview traces the detected area. The classifier
-uses the lesion-centered crop with surrounding skin and displays a melanoma
-research score band. The pulsing Grad-CAM overlay highlights stronger positive
-contributions to the returned class inside the original U-Net outline. It
-shows normalized heat above 0.40 and reaches at most 75% opacity. When the mask
-is empty, the classifier uses the original crop and notes that on the result.
+uses the lesion-centered crop with surrounding skin and displays **low**,
+**inconclusive**, or **high risk** based on its research score. The pulsing
+Grad-CAM overlay highlights stronger positive contributions to the returned
+class inside the original U-Net outline. It shows normalized heat above 0.40
+and reaches at most 75% opacity. When the mask
+is empty, the classifier uses the original crop and the demo displays an
+inconclusive result with instructions to adjust the crop.
 Processing stays in memory on your computer.
 
 To run the saved legacy cascade, pass its `model.json` with `--model`. Keep the
 checkpoints referenced by that file at their saved relative paths. The cascade
-uses the black-background input and shows a melanoma score band on its
+uses the black-background input and shows a melanoma outcome on its
 MEL-vs-NV branch.
 
 To populate **Sample photos**, install the five public-domain or CC0 examples
