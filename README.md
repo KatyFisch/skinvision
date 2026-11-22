@@ -100,15 +100,17 @@ To use a saved ResNet cascade router and a different direct 11-class run:
 uv run --locked python -m demo --router-model path/to/cascade/model.json --other-model path/to/direct-11-run
 ```
 
-The demo still recognizes local overrides at `data/models/cascade-router/model.json`
-and `data/models/direct-11/`. `MILK10K_DATA_DIR` replaces `data/` in these paths
-when set. Keep the router manifest's relative paths to the fold checkpoints
-intact. Use a trusted direct 11-class run containing `metrics.json` and `heads.joblib`.
+Pass `--router-model` to use a local router manifest and its saved cutoff.
+Keep the manifest's relative paths to the fold checkpoints intact. The demo
+also recognizes a local direct 11-class run at `data/models/direct-11/`.
+`MILK10K_DATA_DIR` replaces `data/` when set. Use a trusted run containing
+`metrics.json` and `heads.joblib`.
 The demo also reuses an existing `models/unet_segmentation_full.pth` or its
 extracted folder. Pass `--segmentation-model` for another location and
 `--mel-nv-only` to run just the padded-crop classifier.
 
-The router scores the full frame at its saved cutoff. The MEL/NV branch uses
+The default router scores the full frame at a cutoff selected to route 95%
+of melanomas on the development folds. The MEL/NV branch uses
 the padded crop and reports the predicted diagnosis and melanoma signal.
 The other branch scores the full frame and shows the leading diagnosis among
 the nine other classes. The combined pipeline has not been evaluated as a

@@ -20,7 +20,7 @@ from classifiers.model import DermFMClassifier
 from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import LesionRouter, PhotoClassifier
 from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
-from demo.model_assets import ROUTER_MANIFEST, SEGMENTATION_CHECKPOINT, download_checkpoints
+from demo.model_assets import DEFAULT_ROUTER_CUTOFF, ROUTER_MANIFEST, SEGMENTATION_CHECKPOINT, download_checkpoints
 from demo.samples import BUNDLED_SAMPLE_DIR, SAMPLE_ASSETS, available_samples
 from demo.segmentation import outline_path, overlay_png
 
@@ -202,8 +202,7 @@ def main() -> None:
     use_routing = padded_crop and not args.mel_nv_only
     if not use_routing and (args.router_model or args.other_model):
         parser.error("A separate router and other-diagnosis model require a padded-crop --model with routing enabled.")
-    local_router = data_dir / "models/cascade-router/model.json"
-    router_model = args.router_model or (local_router if local_router.is_file() else None)
+    router_model = args.router_model
     if router_model is not None:
         router_model = router_model.expanduser()
         if not router_model.is_file():
@@ -238,7 +237,7 @@ def main() -> None:
     routing = None
     if use_routing and isinstance(classifier, PaddedCropTorchModel):
         assert router_model is not None
-        router = LesionRouter(router_model, device)
+        router = LesionRouter(router_model, device, cutoff=DEFAULT_ROUTER_CUTOFF if args.router_model is None else None)
         other_classifier = DermFMClassifier(other_model, data_dir, device, expected_task="direct_11", encoder=classifier.encoder)
         routing = (router, other_classifier)
     segmenter = LesionSegmenter(checkpoint, device)

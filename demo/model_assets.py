@@ -8,6 +8,8 @@ from tempfile import TemporaryDirectory
 CHECKPOINT_TAG = "demo-checkpoints-v1"
 CHECKPOINT_COMMIT = "97bd1fe4e986e910c9126bc8423a6e3031d17b76"
 ROUTER_MANIFEST = Path("router/model.json")
+# 95% melanoma routing sensitivity on the development folds for these weights.
+DEFAULT_ROUTER_CUTOFF = 9.013080125441775e-05
 SEGMENTATION_CHECKPOINT = Path("unet_segmentation_full.pth")
 CHECKPOINT_FILES = (SEGMENTATION_CHECKPOINT, ROUTER_MANIFEST, *(Path(f"router/fold-{fold}-refit.pt") for fold in range(1, 4)))
 

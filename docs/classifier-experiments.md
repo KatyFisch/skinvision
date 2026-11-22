@@ -109,6 +109,17 @@ all 11 categories. The final DermFM run was `20261122T105620130348Z-dermfm_zero_
   specificity and 0.057 macro F1 on the 11-class holdout. This is the cascade
   format still supported by the app. Run `20261121T200623773355Z`.
 
+## Demo router cutoff
+
+The demo reuses the clinical ResNet-18 router weights from
+`20261121T200623773355Z`. Its cutoff is the 342nd-highest router score among
+the 360 development melanomas, scored by their held-out fold models. The
+cutoff routed 95% (342/360) of those melanomas to the MEL-vs-NV model.
+On the local MILK10k holdout, the three-member ensemble routed 90/90
+melanomas, 146/149 nevi, and 545/809 lesions with other diagnoses. The
+previous cutoff routed 90/90 melanomas, 149/149 nevi, and 742/809 lesions
+with other diagnoses. These counts measure routing to the specialist.
+
 ## What these results cover
 
 MILK10k ground truth is lesion-level. Most labels in the training release

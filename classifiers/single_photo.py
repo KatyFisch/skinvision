@@ -113,10 +113,10 @@ def specialist_scores(models: list[LesionResNet18], photos: torch.Tensor) -> np.
 
 
 class LesionRouter:
-    def __init__(self, model_path: Path, device: torch.device) -> None:
+    def __init__(self, model_path: Path, device: torch.device, *, cutoff: float | None = None) -> None:
         model_path = model_path.expanduser().resolve()
         config = json.loads(model_path.read_text())
-        self.cutoff = float(config["cutoffs"]["router"])
+        self.cutoff = float(config["cutoffs"]["router"]) if cutoff is None else cutoff
         if not 0 <= self.cutoff <= 1 or not config["weights"]:
             raise ValueError("Expected a valid router cutoff and at least one routed checkpoint")
         self.models = load_routed_models(config["weights"], model_path.parent, device)

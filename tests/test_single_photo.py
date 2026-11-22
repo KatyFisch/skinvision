@@ -1,13 +1,27 @@
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import TestCase
+from unittest.mock import patch
 
 import numpy as np
+import torch
 from PIL import Image
 
 from classifiers.score_bands import HIGH_MELANOMA_SCORE, MODERATE_MELANOMA_SCORE, melanoma_score_band
-from classifiers.single_photo import prepare_photo
+from classifiers.single_photo import LesionRouter, prepare_photo
 
 
 class SinglePhotoTest(TestCase):
+    def test_router_cutoff_defaults_to_manifest_and_accepts_override(self) -> None:
+        with TemporaryDirectory() as directory, patch("classifiers.single_photo.load_routed_models"):
+            manifest = Path(directory) / "model.json"
+            manifest.write_text(json.dumps({"cutoffs": {"router": 0.1}, "weights": [{"routed": "fold.pt"}]}))
+            device = torch.device("cpu")
+
+            self.assertEqual(LesionRouter(manifest, device).cutoff, 0.1)
+            self.assertEqual(LesionRouter(manifest, device, cutoff=0.2).cutoff, 0.2)
+
     def test_melanoma_score_band_boundaries(self) -> None:
         for cutoff, lower_band, new_band in (
             (0.001, "below", "low"),
