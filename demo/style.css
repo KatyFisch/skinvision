@@ -126,11 +126,9 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .result-done { padding-top: 16px; animation: appear 170ms var(--ease-out); }
 .result-code { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; }
 .result-label { font: 29px/1.13 var(--serif); letter-spacing: -.025em; margin-top: 6px; }
-.score-band { margin-top: 14px; color: var(--muted); font-size: 13px; }
-.score-band-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 7px; }
+.score-band-scale { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 14px; }
 .score-band-scale span { height: 4px; background: var(--line); border-radius: 3px; }
 .score-band-scale .is-active { background: var(--green); }
-#result-score { color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600; }
 .result-empty-help { margin-top: 10px; color: var(--muted); }
 .result-details { border-top: 1px solid var(--line); margin-top: 15px; padding-top: 11px; display: grid; gap: 2px; }
 .result-details dt { color: var(--muted); font-size: 13px; }

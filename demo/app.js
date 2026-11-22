@@ -18,7 +18,6 @@ const melanomaBands = {
   moderate: 'Moderate melanoma signal',
   high: 'High melanoma signal',
 };
-const scoreFormat = new Intl.NumberFormat('en', { maximumSignificantDigits: 8 });
 
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const dropzone = document.getElementById('dropzone');
@@ -79,10 +78,10 @@ function showPrediction(data) {
   document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
   document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
   const taskLabel = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
-  document.querySelector('#result-route').textContent = data.analysis_input === 'original_photo' ? `${taskLabel} · original crop used` : taskLabel;
+  document.querySelector('#result-route').textContent =
+    data.analysis_input === 'original_photo' ? `${taskLabel} · original crop used` : taskLabel;
   resultBand.hidden = !bandLabel;
   if (bandLabel) {
-    document.querySelector('#result-score').textContent = scoreFormat.format(data.melanoma_score);
     scoreSegments.forEach((segment) => {
       segment.classList.toggle('is-active', segment.getAttribute('data-score-band') === data.melanoma_score_band);
     });
