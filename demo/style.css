@@ -97,8 +97,19 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .result-mark { width: 33px; height: 30px; background: linear-gradient(var(--green), var(--green)) 0 5px / 28px 1px no-repeat, linear-gradient(var(--green), var(--green)) 0 14px / 19px 1px no-repeat, linear-gradient(var(--green), var(--green)) 0 23px / 24px 1px no-repeat; opacity: .54; }
 .analysis-activity { display: flex; align-items: center; gap: 12px; min-height: 36px; }
 .spinner { width: 23px; height: 23px; border: 2px solid var(--line); border-top-color: var(--green); border-radius: 50%; animation: spin .8s linear infinite; }
-.analysis-percent { color: var(--green); font: 500 36px/1 var(--sans); font-variant-numeric: tabular-nums; letter-spacing: -.045em; counter-reset: analysis-percent var(--analysis-percent); animation: count-analysis 2500ms ease-in both; }
+.analysis-percent {
+  --count-duration: 2500ms;
+  color: var(--green);
+  font: 500 36px/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.045em;
+  counter-reset: analysis-percent var(--analysis-percent);
+  transform-origin: left center;
+  animation: count-analysis var(--count-duration) ease-in both,
+    pulse-analysis 260ms var(--ease-out) calc(var(--count-duration) + 220ms);
+}
 .analysis-percent::after { content: counter(analysis-percent) '%'; }
+.result-placeholder.is-fading { animation: fade-analysis 160ms ease-in both; }
 .result-done { padding-top: 16px; animation: appear 170ms var(--ease-out); }
 .result-code { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .08em; }
 .result-label { font: 29px/1.13 var(--serif); letter-spacing: -.025em; margin-top: 6px; }
@@ -128,6 +139,8 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 }
 @property --analysis-percent { syntax: '<integer>'; initial-value: 0; inherits: false; }
 @keyframes count-analysis { from { --analysis-percent: 0; } to { --analysis-percent: 100; } }
+@keyframes pulse-analysis { 50% { transform: scale(1.09); } }
+@keyframes fade-analysis { to { opacity: 0; } }
 @keyframes scan-crop {
   from { opacity: 0; transform: translateY(-100%); }
   18%, 79% { opacity: .7; }
@@ -151,6 +164,7 @@ h1, h2, p, ul, dl, dd { margin: 0; }
   .button { transition: none; }
   .button:not([aria-disabled="true"]):active { transform: none; }
   .result-done, .spinner { animation: none; }
+  .result-placeholder.is-fading { animation: none; }
   .is-segmenting .mask-scan-line { animation: none; }
   .analysis-percent { display: none; animation: none; }
   .has-outline .lesion-outline path, .has-outline .lesion-outline stop { animation: none; }

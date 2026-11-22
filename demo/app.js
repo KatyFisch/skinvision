@@ -50,6 +50,7 @@ function showError(message = '') {
 
 function showResult(state) {
   const busy = state === 'segmenting' || state === 'classifying';
+  resultLoading.classList.remove('is-fading');
   resultIdle.hidden = state !== 'idle';
   resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
@@ -300,6 +301,9 @@ analyze.addEventListener('click', async () => {
       }
 
       await countFinished;
+      if (request !== pending) return;
+      resultLoading.classList.add('is-fading');
+      await finishAnimations(resultLoading);
       if (request !== pending) return;
       if (data.research_prediction === null) {
         showResult('empty');
