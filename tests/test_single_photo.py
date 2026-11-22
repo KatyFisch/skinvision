@@ -3,7 +3,8 @@ from unittest import TestCase
 import numpy as np
 from PIL import Image
 
-from classifiers.single_photo import HIGH_MELANOMA_SCORE, MODERATE_MELANOMA_SCORE, melanoma_score_band, prepare_photo
+from classifiers.score_bands import HIGH_MELANOMA_SCORE, MODERATE_MELANOMA_SCORE, melanoma_score_band
+from classifiers.single_photo import prepare_photo
 
 
 class SinglePhotoTest(TestCase):

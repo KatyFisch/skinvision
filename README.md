@@ -72,8 +72,8 @@ Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
 the 600 × 450 crop, and the preview traces the detected area. The classifier
-uses the lesion-centered crop with surrounding skin and displays a MEL or NV
-research label. When the mask is empty, it uses the original crop and notes
+uses the lesion-centered crop with surrounding skin and displays a melanoma
+research score band. When the mask is empty, it uses the original crop and notes
 that on the result. Processing stays in memory on your computer.
 
 To run the saved legacy cascade, pass its `model.json` with `--model`. Keep the

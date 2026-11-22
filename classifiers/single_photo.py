@@ -14,11 +14,10 @@ from torchvision.models import resnet18
 
 from classifiers.catalog import MILK_DIAGNOSES
 from classifiers.encoders import imagenet_normalize, load_rgb
+from classifiers.score_bands import melanoma_score_band
 
 PHOTO_EDGE = 600
 OTHER_CLASSES = np.array(sorted(set(MILK_DIAGNOSES) - {"MEL", "NV"}))
-MODERATE_MELANOMA_SCORE = 0.50
-HIGH_MELANOMA_SCORE = 0.90
 
 
 @dataclass(frozen=True)
@@ -31,17 +30,6 @@ def prepare_photo(image: Image.Image) -> torch.Tensor:
     """Match the training scale while keeping the complete frame and aspect ratio."""
     image.thumbnail((PHOTO_EDGE, PHOTO_EDGE), Image.Resampling.LANCZOS)
     return imagenet_normalize(image)
-
-
-def melanoma_score_band(score: float, specialist_cutoff: float) -> str:
-    """Describe the raw specialist score for the research demo."""
-    if score < specialist_cutoff:
-        return "below"
-    if score >= HIGH_MELANOMA_SCORE:
-        return "high"
-    if score >= MODERATE_MELANOMA_SCORE:
-        return "moderate"
-    return "low"
 
 
 # Preserve the module and buffer names stored in existing state dictionaries.

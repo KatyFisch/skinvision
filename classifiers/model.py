@@ -14,6 +14,7 @@ from classifiers import dermfm_zero
 from classifiers.catalog import MILK_DIAGNOSES
 from classifiers.encoders import load_rgb
 from classifiers.lesion_crop import PADDED_CROP_SETTINGS, PHOTO_SIZE, crop_with_skin_margin, frame_photo
+from classifiers.score_bands import melanoma_score_band
 from classifiers.segmentation import LesionSegmenter
 
 Task = Literal["padded_crop", "direct_11"]
@@ -86,11 +87,15 @@ class DermFMClassifier:
     def predict(self, photo: Image.Image) -> dict[str, str | float | None]:
         scores = self.score_photo(photo)
         prediction = str(predict_labels(scores[None, :], self.labels, self.cutoff)[0])
-        return {
+        melanoma = float(scores[self.labels.index("MEL")])
+        result: dict[str, str | float | None] = {
             "research_prediction": prediction,
             "route": "MEL_OR_NV" if self.task == "padded_crop" else None,
-            "melanoma_score": float(scores[self.labels.index("MEL")]),
+            "melanoma_score": melanoma,
         }
+        if self.task == "padded_crop":
+            result["melanoma_score_band"] = melanoma_score_band(melanoma, self.cutoff)
+        return result
 
     def predict_file(self, path: Path) -> dict[str, str | float | None]:
         photo = load_rgb(path)
