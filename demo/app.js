@@ -17,15 +17,44 @@ const riskResults = {
 };
 
 const diagnoses = {
-  AKIEC: 'actinic keratosis or intraepidermal carcinoma',
-  BCC: 'basal cell carcinoma',
-  BEN_OTH: 'another benign growth',
-  BKL: 'a benign keratinocytic lesion',
-  DF: 'dermatofibroma',
-  INF: 'an inflammatory or infectious condition',
-  MAL_OTH: 'another malignant growth',
-  SCCKA: 'squamous cell carcinoma or keratoacanthoma',
-  VASC: 'a vascular lesion or bleeding',
+  AKIEC: {
+    label: 'actinic keratosis or intraepidermal carcinoma',
+    summary:
+      'Actinic keratosis is a rough, precancerous patch from sun damage. Intraepidermal carcinoma is cancer confined to the outer layer of the skin.',
+  },
+  BCC: {
+    label: 'basal cell carcinoma',
+    summary: 'A common skin cancer that usually grows slowly. It can look like a shiny bump or a flat, scaly patch.',
+  },
+  BEN_OTH: {
+    label: 'another benign growth',
+    summary: 'This group includes noncancerous skin growths such as cysts and skin tags.',
+  },
+  BKL: {
+    label: 'a benign keratinocytic lesion',
+    summary: 'Noncancerous spots or growths in the outer layer of the skin, such as seborrheic keratoses or sun spots.',
+  },
+  DF: {
+    label: 'dermatofibroma',
+    summary: 'A small, firm, noncancerous bump that often forms on the legs and may dimple when pressed from the sides.',
+  },
+  INF: {
+    label: 'an inflammatory or infectious condition',
+    summary: 'This group covers skin changes from inflammation and infections such as warts or molluscum contagiosum.',
+  },
+  MAL_OTH: {
+    label: 'another malignant growth',
+    summary: 'This group includes several less common cancers that can affect the skin, such as Merkel cell carcinoma.',
+  },
+  SCCKA: {
+    label: 'squamous cell carcinoma or keratoacanthoma',
+    summary:
+      'Squamous cell carcinoma starts in cells in the skin’s outer layer. Keratoacanthoma is a fast-growing bump that can look similar.',
+  },
+  VASC: {
+    label: 'a vascular lesion or bleeding',
+    summary: 'This group includes blood vessel growths such as cherry angiomas and spots caused by bleeding beneath the skin.',
+  },
 };
 
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
@@ -56,6 +85,7 @@ const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultLabel = document.getElementById('result-label');
 const resultDescription = document.getElementById('result-description');
+const resultSummary = document.getElementById('result-summary');
 
 let photo;
 let selectedSample;
@@ -102,7 +132,8 @@ function predictionCopy(data) {
     return { ...riskResults[outcome], outcome };
   }
   if (data.route === 'OTHER' && Object.hasOwn(diagnoses, diagnosis)) {
-    return { title: 'low risk for melanoma', description: `We think it might be ${diagnoses[diagnosis]}.`, outcome: 'low' };
+    const { label, summary } = diagnoses[diagnosis];
+    return { title: 'low risk for melanoma', description: `There are indicators for ${label}.`, summary, outcome: 'low' };
   }
   return { title: 'Result unavailable', description: 'Try analyzing the photo again.' };
 }
@@ -129,11 +160,13 @@ function showPrediction(data) {
     heatmapNote.textContent = 'No visible heatmap signal inside the lesion outline';
     heatmapNote.hidden = false;
   }
-  const { title, description, outcome } = predictionCopy(data);
+  const { title, description, summary, outcome } = predictionCopy(data);
   resultDone.dataset.outcome = outcome ?? '';
   resultLabel.textContent = title;
   resultDescription.textContent = description;
   resultDescription.hidden = !description;
+  resultSummary.textContent = summary ?? '';
+  resultSummary.hidden = !summary;
   showResult('done');
 }
 

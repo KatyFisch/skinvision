@@ -181,6 +181,7 @@ h1, h2, p, ul { margin: 0; }
 [data-outcome="moderate"] .result-label { color: #76561d; }
 [data-outcome="low"] .result-label { color: var(--green); }
 .result-note { margin-top: 9px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.result-note + .result-note { margin-top: 5px; }
 .research-note { border-radius: 12px; padding: 12px 16px; background: var(--note); color: #493b29; }
 .research-note h2 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
 .research-note p { font-size: 13px; }
@@ -220,6 +221,8 @@ h1, h2, p, ul { margin: 0; }
   .side .panel { padding-block: 14px; }
   .result-panel { min-height: 179px; }
   .result-label { font-size: clamp(34px, 3.4vw, 42px); }
+  .result-done:has(#result-summary:not([hidden])) { padding-top: 8px; }
+  .result-done:has(#result-summary:not([hidden])) .result-note { font-size: 13px; line-height: 1.35; }
   .sample-grid {
     grid-template-columns: none;
     grid-auto-flow: column;

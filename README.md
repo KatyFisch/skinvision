@@ -86,8 +86,8 @@ the 600 × 450 crop, and the preview traces the detected area. The MEL/NV
 classifier uses the lesion-centered crop with surrounding skin. Its score band
 determines whether the card shows **low risk**, **moderate risk**, or **high risk**.
 The other-diagnosis route shows **low risk for melanoma** with its leading
-diagnosis as a possible match. The browser console logs the raw melanoma
-score or the score for the highest-ranked other diagnosis.
+diagnosis as a possible match and a short description. The browser console logs
+the raw melanoma score or the score for the highest-ranked other diagnosis.
 For MEL/NV predictions, Grad-CAM highlights relative support for the predicted
 class inside the U-Net outline. The scale runs from purple (weaker) to gold
 (stronger). Very low activations stay transparent and the overlay peaks at
@@ -136,6 +136,19 @@ with the bundled models. To regenerate the bundled crops, run
 licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Attribution
+
+The demo's diagnosis descriptions use the [MILK10k categories](https://challenge.isic-archive.com/landing/milk10k/)
+and summarize these Wikipedia articles.
+
+- [Actinic keratosis](https://en.wikipedia.org/wiki/Actinic_keratosis) and [squamous cell carcinoma in situ](https://en.wikipedia.org/wiki/Cutaneous_squamous-cell_carcinoma#In_situ_disease)
+- [Basal cell carcinoma](https://en.wikipedia.org/wiki/Basal-cell_carcinoma)
+- [Benign tumors](https://en.wikipedia.org/wiki/Benign_tumor), [epidermoid cysts](https://en.wikipedia.org/wiki/Epidermoid_cyst), and [skin tags](https://en.wikipedia.org/wiki/Acrochordon)
+- [Seborrheic keratosis](https://en.wikipedia.org/wiki/Seborrheic_keratosis) and [sun spots](https://en.wikipedia.org/wiki/Liver_spot)
+- [Dermatofibroma](https://en.wikipedia.org/wiki/Dermatofibroma)
+- [Inflammation](https://en.wikipedia.org/wiki/Inflammation), [warts](https://en.wikipedia.org/wiki/Wart), and [molluscum contagiosum](https://en.wikipedia.org/wiki/Molluscum_contagiosum)
+- [Merkel cell carcinoma](https://en.wikipedia.org/wiki/Merkel-cell_carcinoma)
+- [Cutaneous squamous cell carcinoma](https://en.wikipedia.org/wiki/Cutaneous_squamous-cell_carcinoma) and [keratoacanthoma](https://en.wikipedia.org/wiki/Keratoacanthoma)
+- [Cherry angioma](https://en.wikipedia.org/wiki/Cherry_angioma) and [purpura](https://en.wikipedia.org/wiki/Purpura)
 
 MILK study team. MILK10k. ISIC Archive, 2025, doi:10.34970/648456.
 
