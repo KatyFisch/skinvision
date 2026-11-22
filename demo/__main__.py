@@ -3,17 +3,23 @@
 import argparse
 import json
 import os
+import sys
 from _thread import LockType
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
 from functools import partial
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from threading import Lock
+from threading import Lock, Thread
 
 import torch
+from huggingface_hub.errors import HfHubHTTPError
 from PIL import Image, ImageOps
 
+from classifiers.dermfm_zero import WEIGHTS_FILENAME, checkpoint_dir, download
 from classifiers.export_padded_crop import PaddedCropTorchModel
 from classifiers.lesion_crop import crop_with_skin_margin, frame_photo, skin_margin_box
 from classifiers.model import DermFMClassifier
@@ -27,6 +33,7 @@ from demo.segmentation import outline_path, overlay_png
 ROOT = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
 ANALYSIS_STREAM = "application/x-ndjson"
+MODEL_STATUS_PATH = "/api/model-status"
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/style.css": ("style.css", "text/css; charset=utf-8"),
@@ -34,25 +41,41 @@ ASSETS = {
 }
 
 
+class ModelStatus(StrEnum):
+    DOWNLOADING = "downloading"
+    ACCESS_REQUIRED = "access_required"
+    DOWNLOAD_FAILED = "download_failed"
+    LOADING = "loading"
+    LOAD_FAILED = "load_failed"
+    READY = "ready"
+
+
+@dataclass(frozen=True)
+class DemoModels:
+    classifier: PhotoClassifier | PaddedCropTorchModel
+    segmenter: LesionSegmenter
+    padded_crop: bool
+    routing: tuple[LesionRouter, DermFMClassifier] | None = None
+
+
+@dataclass(frozen=True)
+class DemoState:
+    status: ModelStatus
+    models: DemoModels | None = None
+
+
 class DemoHandler(BaseHTTPRequestHandler):
     def __init__(
-        self,
-        *args,
-        classifier: PhotoClassifier | PaddedCropTorchModel,
-        segmenter: LesionSegmenter,
-        inference_lock: LockType,
-        padded_crop: bool = False,
-        routing: tuple[LesionRouter, DermFMClassifier] | None = None,
-        samples_dir: Path = BUNDLED_SAMPLE_DIR,
-        **kwargs,
+        self, *args, model_state: Callable[[], DemoState], inference_lock: LockType, samples_dir: Path = BUNDLED_SAMPLE_DIR, **kwargs
     ) -> None:
-        self.classifier = classifier
-        self.segmenter = segmenter
+        self.model_state = model_state
         self.inference_lock = inference_lock
-        self.padded_crop = padded_crop
-        self.routing = routing
         self.samples_dir = samples_dir
         super().__init__(*args, **kwargs)
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        if code != HTTPStatus.OK or self.path != MODEL_STATUS_PATH:
+            super().log_request(code, size)
 
     def start_reply(self, status: HTTPStatus, content_type: str, length: int | None = None) -> None:
         self.send_response(status)
@@ -78,37 +101,38 @@ class DemoHandler(BaseHTTPRequestHandler):
         self.wfile.write((json.dumps(body) + "\n").encode())
         self.wfile.flush()
 
-    def analyze(self, photo: Image.Image, stream: bool) -> None:
+    def analyze(self, models: DemoModels, photo: Image.Image, stream: bool) -> None:
+        classifier, padded_crop, routing = models.classifier, models.padded_crop, models.routing
         try:
             if stream:
                 self.start_reply(HTTPStatus.OK, ANALYSIS_STREAM)
             with self.inference_lock:
-                if self.padded_crop:
+                if padded_crop:
                     photo = frame_photo(photo)
-                mask = self.segmenter.mask(photo)
+                mask = models.segmenter.mask(photo)
                 has_mask = mask.getbbox() is not None
-                overlay_mask = Image.new("L", photo.size, 255) if self.padded_crop and not has_mask else mask
+                overlay_mask = Image.new("L", photo.size, 255) if padded_crop and not has_mask else mask
                 overlay = overlay_png(overlay_mask)
                 if stream:
                     self.send_event({"overlay": overlay, "outline": outline_path(mask)})
 
                 result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
-                if self.routing and has_mask and not self.routing[0].uses_specialist(photo):
-                    diagnosis, score = self.routing[1].predict_other(photo)
+                if routing and has_mask and not routing[0].uses_specialist(photo):
+                    diagnosis, score = routing[1].predict_other(photo)
                     result.update(research_prediction=diagnosis, diagnosis_score=score, route="OTHER", analysis_input="full_frame")
-                elif self.padded_crop:
+                elif padded_crop:
                     prepared = crop_with_skin_margin(photo, mask)
-                    result.update(self.classifier.predict(prepared))
+                    result.update(classifier.predict(prepared))
                     result["analysis_input"] = "padded_crop" if has_mask else "original_photo"
-                    if stream and isinstance(self.classifier, PaddedCropTorchModel) and (box := skin_margin_box(photo, mask)) is not None:
+                    if stream and isinstance(classifier, PaddedCropTorchModel) and (box := skin_margin_box(photo, mask)) is not None:
                         try:
-                            heat = padded_crop_heatmap(prepared, self.classifier, str(result["research_prediction"]))
+                            heat = padded_crop_heatmap(prepared, classifier, str(result["research_prediction"]))
                             result["heatmap"] = heatmap_overlay(heat, mask, box)
                         except RuntimeError as error:
                             self.log_error("Grad-CAM unavailable: %s", error)
                 elif has_mask:
                     masked = Image.composite(photo, Image.new("RGB", photo.size), mask)
-                    result.update(self.classifier.predict(masked))
+                    result.update(classifier.predict(masked))
             if stream:
                 self.send_event(result)
             else:
@@ -122,6 +146,10 @@ class DemoHandler(BaseHTTPRequestHandler):
                 self.reply_json(HTTPStatus.INTERNAL_SERVER_ERROR, message)
 
     def do_GET(self) -> None:
+        if self.path == MODEL_STATUS_PATH:
+            self.reply_json(HTTPStatus.OK, {"status": self.model_state().status})
+            return
+
         if self.path == "/api/samples":
             catalog = json.dumps(available_samples(self.samples_dir)).encode()
             self.reply(HTTPStatus.OK, "application/json", catalog)
@@ -154,6 +182,11 @@ class DemoHandler(BaseHTTPRequestHandler):
         if host not in {"127.0.0.1", "localhost"} or self.headers.get("Content-Type") != "application/octet-stream":
             self.reply_json(HTTPStatus.FORBIDDEN, {"error": "Open the demo on localhost and try again."})
             return
+        state = self.model_state()
+        if state.models is None:
+            self.reply_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "The analysis model is unavailable.", "status": state.status})
+            return
+
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -170,7 +203,7 @@ class DemoHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            self.analyze(photo, stream=self.headers.get("Accept") == ANALYSIS_STREAM)
+            self.analyze(state.models, photo, stream=self.headers.get("Accept") == ANALYSIS_STREAM)
         except (BrokenPipeError, ConnectionResetError):
             pass
 
@@ -234,19 +267,44 @@ def main() -> None:
         router_model = router_model or bundled / ROUTER_MANIFEST
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
-    routing = None
-    if use_routing and isinstance(classifier, PaddedCropTorchModel):
-        assert router_model is not None
-        router = LesionRouter(router_model, device, cutoff=DEFAULT_ROUTER_CUTOFF if args.router_model is None else None)
-        other_classifier = DermFMClassifier(other_model, data_dir, device, expected_task="direct_11", encoder=classifier.encoder)
-        routing = (router, other_classifier)
-    segmenter = LesionSegmenter(checkpoint, device)
-    handler = partial(
-        DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), padded_crop=padded_crop, routing=routing
-    )
+    assert checkpoint is not None
+
+    def load_models(segmenter_checkpoint: Path) -> DemoModels:
+        classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
+        routing = None
+        if use_routing and isinstance(classifier, PaddedCropTorchModel):
+            assert router_model is not None
+            router = LesionRouter(router_model, device, cutoff=DEFAULT_ROUTER_CUTOFF if args.router_model is None else None)
+            other = DermFMClassifier(other_model, data_dir, device, expected_task="direct_11", encoder=classifier.encoder)
+            routing = (router, other)
+        return DemoModels(classifier, LesionSegmenter(segmenter_checkpoint, device), padded_crop, routing)
+
+    needs_download = padded_crop and not (checkpoint_dir(data_dir) / WEIGHTS_FILENAME).is_file()
+    state = DemoState(ModelStatus.DOWNLOADING) if needs_download else DemoState(ModelStatus.READY, load_models(checkpoint))
+
+    def download_and_load(segmenter_checkpoint: Path) -> None:
+        nonlocal state
+        # Publish failures at the worker boundary so the browser never waits on a stopped thread.
+        try:
+            download(WEIGHTS_FILENAME, data_dir)
+        except Exception as error:  # noqa: BLE001
+            access_denied = isinstance(error, HfHubHTTPError) and error.response.status_code in {401, 403}
+            state = DemoState(ModelStatus.ACCESS_REQUIRED if access_denied else ModelStatus.DOWNLOAD_FAILED)
+            print(f"Could not download the DermFM model from Hugging Face ({type(error).__name__}).", file=sys.stderr, flush=True)
+            return
+
+        state = DemoState(ModelStatus.LOADING)
+        try:
+            state = DemoState(ModelStatus.READY, load_models(segmenter_checkpoint))
+        except Exception as error:  # noqa: BLE001
+            state = DemoState(ModelStatus.LOAD_FAILED)
+            print(f"Could not load the demo models ({type(error).__name__}).", file=sys.stderr, flush=True)
+
+    handler = partial(DemoHandler, model_state=lambda: state, inference_lock=Lock())
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
         print(f"SkinVision is running at http://127.0.0.1:{server.server_port}", flush=True)
+        if needs_download:
+            Thread(target=download_and_load, args=(checkpoint,), daemon=True).start()
         try:
             server.serve_forever()
         except KeyboardInterrupt:

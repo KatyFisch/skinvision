@@ -11,7 +11,7 @@ from unittest.mock import Mock
 from PIL import Image, ImageChops
 
 from classifiers.lesion_crop import crop_with_skin_margin
-from demo.__main__ import ANALYSIS_STREAM, DemoHandler
+from demo.__main__ import ANALYSIS_STREAM, MODEL_STATUS_PATH, DemoHandler, DemoModels, DemoState, ModelStatus
 
 
 class DemoSegmentationTest(TestCase):
@@ -24,14 +24,8 @@ class DemoSegmentationTest(TestCase):
         self.segmenter = segmenter
 
     def start_client(self, *, padded_crop: bool = False, routing: tuple[Mock, Mock] | None = None) -> None:
-        handler = partial(
-            DemoHandler,
-            classifier=self.classifier,
-            segmenter=self.segmenter,
-            inference_lock=Lock(),
-            padded_crop=padded_crop,
-            routing=routing,
-        )
+        self.state = DemoState(ModelStatus.READY, DemoModels(self.classifier, self.segmenter, padded_crop, routing))
+        handler = partial(DemoHandler, model_state=lambda: self.state, inference_lock=Lock())
         server = self.enterContext(ThreadingHTTPServer(("127.0.0.1", 0), handler))
         Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(server.shutdown)
@@ -45,6 +39,7 @@ class DemoSegmentationTest(TestCase):
 
     def test_gallery_serves_all_bundled_photos(self) -> None:
         self.start_client()
+        self.state = DemoState(ModelStatus.DOWNLOADING)
         self.client.request("GET", "/api/samples")
         with self.client.getresponse() as response:
             self.assertEqual(response.status, 200)
@@ -63,6 +58,29 @@ class DemoSegmentationTest(TestCase):
                     with Image.open(BytesIO(response.read())) as photo:
                         self.assertEqual(photo.size, self.photo.size)
                         self.assertFalse(photo.getexif())
+
+    def test_reports_model_status_and_refuses_analysis_until_ready(self) -> None:
+        self.start_client()
+        ready = self.state
+        for status in (ModelStatus.DOWNLOADING, ModelStatus.ACCESS_REQUIRED, ModelStatus.DOWNLOAD_FAILED, ModelStatus.LOADING):
+            with self.subTest(status=status):
+                self.state = DemoState(status)
+                self.client.request("GET", MODEL_STATUS_PATH)
+                with self.client.getresponse() as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(json.load(response), {"status": status})
+                self.send_photo(ANALYSIS_STREAM)
+                with self.client.getresponse() as response:
+                    self.assertEqual(response.status, 503)
+                    self.assertEqual(json.load(response)["status"], status)
+        self.segmenter.mask.assert_not_called()
+
+        self.state = ready
+        self.send_photo("application/json")
+        with self.client.getresponse() as response:
+            self.assertEqual(response.status, 200)
+            self.assertIsNone(json.load(response)["research_prediction"])
+        self.segmenter.mask.assert_called_once()
 
     def test_streams_outline_before_returning_prediction_on_the_same_mask(self) -> None:
         self.start_client()

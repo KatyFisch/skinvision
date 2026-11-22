@@ -11,6 +11,19 @@
   <header class="masthead">
     <div class="masthead-inner">
       <div class="brand"><span class="brand-mark" aria-hidden="true"></span>SkinVision</div>
+      <div class="model-status" role="status" aria-atomic="true">
+        <p class="model-download" data-model-status="downloading" hidden>
+          <span class="model-download-spinner" aria-hidden="true"></span>Downloading model (1.66 GB)
+        </p>
+        <p class="model-download-error" data-model-status="access_required" hidden>
+          Model download needs Hugging Face access.
+          <a href="https://huggingface.co/redlessone/DermFM-Zero" target="_blank" rel="noopener noreferrer">Accept the model terms</a>,
+          run <code>uv run --locked hf auth login</code>, and restart the demo.
+        </p>
+        <p class="model-download-error" data-model-status="download_failed" hidden>
+          Couldn’t download the model. Check your connection and available disk space, then restart the demo.
+        </p>
+      </div>
     </div>
   </header>
 

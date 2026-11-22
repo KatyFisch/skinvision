@@ -86,6 +86,15 @@ const resultDone = document.getElementById('result-done');
 const resultLabel = document.getElementById('result-label');
 const resultDescription = document.getElementById('result-description');
 const resultSummary = document.getElementById('result-summary');
+const modelStatusMessages = document.querySelectorAll('[data-model-status]');
+const modelHints = {
+  loading: 'The model is starting',
+  downloading: 'Wait for the model download to finish',
+  access_required: 'Model download needs Hugging Face access',
+  download_failed: 'Model download failed',
+  load_failed: 'The model couldn’t start. Check the terminal.',
+  ready: '',
+};
 
 let photo;
 let selectedSample;
@@ -94,10 +103,35 @@ let crop;
 let drag;
 let request;
 let heatmapUrl;
+let modelStatus = 'loading';
 
 function showError(message = '') {
   error.textContent = message;
   error.hidden = !message;
+}
+
+function updateAnalyzeAvailability(busy) {
+  analyze.setAttribute('aria-disabled', String(!photo || busy || modelStatus !== 'ready'));
+  analyze.title = busy ? 'Analysis is running' : photo ? modelHints[modelStatus] : 'Choose a photo first';
+}
+
+async function checkModelStatus() {
+  try {
+    const response = await fetch('/api/model-status');
+    if (response.ok) {
+      const { status } = await response.json();
+      if (status !== modelStatus) {
+        modelStatus = status;
+        for (const message of modelStatusMessages) {
+          message.toggleAttribute('hidden', message.getAttribute('data-model-status') !== status);
+        }
+        updateAnalyzeAvailability(Boolean(request));
+      }
+    }
+  } catch {
+    // Keep checking while the local server is temporarily unreachable.
+  }
+  if (modelStatus === 'loading' || modelStatus === 'downloading') setTimeout(checkModelStatus, 1000);
 }
 
 function showResult(state) {
@@ -107,8 +141,7 @@ function showResult(state) {
   resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
   analysisPercent.hidden = state !== 'classifying';
-  analyze.setAttribute('aria-disabled', String(!photo || busy));
-  analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
+  updateAnalyzeAvailability(busy);
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
   analyzeIcon.hidden = busy;
 }
@@ -399,6 +432,7 @@ async function loadSampleGallery() {
   document.getElementById('sample-gallery').hidden = false;
 }
 
+checkModelStatus();
 loadSampleGallery();
 
 /** @param {ReadableStream<Uint8Array>} body */
@@ -434,7 +468,7 @@ async function revealOutline(path, pending, scanFinished) {
 }
 
 analyze.addEventListener('click', async () => {
-  if (!photo || request) return;
+  if (!photo || request || modelStatus !== 'ready') return;
   const pending = new AbortController();
   request = pending;
   showError();
