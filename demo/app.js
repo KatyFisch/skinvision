@@ -1,21 +1,31 @@
-const melanomaHeadlines = {
-  low: 'Inconclusive',
-  moderate: 'Moderate melanoma signal',
-  high: 'Strong melanoma signal',
-};
+const melanomaOutcomes = { below: 'low', low: 'inconclusive', moderate: 'inconclusive', high: 'high' };
 
 const biopsyNote = 'Only a biopsy can give conclusive results.';
+const riskResults = {
+  high: {
+    title: 'high risk',
+    description: `The lesion exhibits typical characteristics of melanoma. However some moles can mimic these, too. ${biopsyNote}`,
+  },
+  inconclusive: {
+    title: 'inconclusive',
+    description: `The lesion is not a typical melanoma but exhibits some of the risk markers of melanoma. ${biopsyNote}`,
+  },
+  low: {
+    title: 'low risk',
+    description: 'The lesion does not exhibit any of the characteristics of melanoma. However, only a biopsy can give conclusive results.',
+  },
+};
+
 const diagnoses = {
-  NV: 'melanocytic nevus (mole)',
   AKIEC: 'actinic keratosis or intraepidermal carcinoma',
   BCC: 'basal cell carcinoma',
-  BEN_OTH: 'other benign growth',
-  BKL: 'benign keratinocytic lesion',
+  BEN_OTH: 'another benign growth',
+  BKL: 'a benign keratinocytic lesion',
   DF: 'dermatofibroma',
-  INF: 'inflammatory or infectious condition',
-  MAL_OTH: 'other malignant growth',
+  INF: 'an inflammatory or infectious condition',
+  MAL_OTH: 'another malignant growth',
   SCCKA: 'squamous cell carcinoma or keratoacanthoma',
-  VASC: 'vascular lesion or bleeding',
+  VASC: 'a vascular lesion or bleeding',
 };
 
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
@@ -87,14 +97,12 @@ function predictionCopy(data) {
   }
 
   const diagnosis = data.research_prediction;
-  if (diagnosis === 'MEL') {
-    const band = data.melanoma_score_band;
-    const signal = band === 'high' || band === 'moderate' ? band : 'low';
-    const detail = signal === 'low' ? 'The model found a weak melanoma signal.' : 'Some moles can look similar.';
-    return { title: melanomaHeadlines[signal], description: `${detail} ${biopsyNote}`, signal };
+  if (data.route === 'MEL_OR_NV' && Object.hasOwn(melanomaOutcomes, data.melanoma_score_band)) {
+    const outcome = melanomaOutcomes[data.melanoma_score_band];
+    return { ...riskResults[outcome], outcome };
   }
-  if (Object.hasOwn(diagnoses, diagnosis)) {
-    return { title: `Possible ${diagnoses[diagnosis]}`, description: diagnosis === 'NV' ? biopsyNote : '' };
+  if (data.route === 'OTHER' && Object.hasOwn(diagnoses, diagnosis)) {
+    return { title: 'low risk for melanoma', description: `We think it might be ${diagnoses[diagnosis]}.`, outcome: 'low' };
   }
   return { title: 'Result unavailable', description: 'Try analyzing the photo again.' };
 }
@@ -121,8 +129,8 @@ function showPrediction(data) {
     heatmapNote.textContent = 'No visible heatmap signal inside the lesion outline';
     heatmapNote.hidden = false;
   }
-  const { title, description, signal } = predictionCopy(data);
-  resultDone.dataset.signal = signal ?? '';
+  const { title, description, outcome } = predictionCopy(data);
+  resultDone.dataset.outcome = outcome ?? '';
   resultLabel.textContent = title;
   resultDescription.textContent = description;
   resultDescription.hidden = !description;

@@ -82,12 +82,12 @@ uv run --locked python -m demo --model data/models/padded-crop
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
-the 600 × 450 crop, and the preview traces the detected area. The classifier
-uses the lesion-centered crop with surrounding skin. When it returns MEL,
-the card shows **Inconclusive**, **Moderate melanoma signal**, or
-**Strong melanoma signal** according to the model's score band. Other
-predicted diagnoses appear as possible matches. The browser console logs the
-raw melanoma score or the score for the highest-ranked other diagnosis.
+the 600 × 450 crop, and the preview traces the detected area. The MEL/NV
+classifier uses the lesion-centered crop with surrounding skin. Its score band
+determines whether the card shows **low risk**, **inconclusive**, or **high risk**.
+The other-diagnosis route shows **low risk for melanoma** with its leading
+diagnosis as a possible match. The browser console logs the raw melanoma
+score or the score for the highest-ranked other diagnosis.
 For MEL/NV predictions, Grad-CAM highlights relative support for the predicted
 class inside the U-Net outline. The scale runs from purple (weaker) to gold
 (stronger). Very low activations stay transparent and the overlay peaks at
@@ -114,7 +114,7 @@ extracted folder. Pass `--segmentation-model` for another location and
 
 The default router scores the full frame at a cutoff selected to route 95%
 of melanomas on the development folds. The MEL/NV branch uses
-the padded crop and reports the predicted diagnosis and melanoma signal.
+the padded crop and reports the corresponding research outcome.
 The other branch scores the full frame and shows the leading diagnosis among
 the nine other classes. The combined pipeline has not been evaluated as a
 clinical tool.
