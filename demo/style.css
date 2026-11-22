@@ -178,7 +178,7 @@ h1, h2, p, ul { margin: 0; }
 .result-done { padding-top: 12px; animation: appear 170ms var(--ease-out); }
 .result-label { font: 400 clamp(34px, 4vw, 52px)/1.04 var(--serif); letter-spacing: -.045em; text-wrap: balance; }
 [data-outcome="high"] .result-label { color: #933c31; }
-[data-outcome="inconclusive"] .result-label { color: #76561d; }
+[data-outcome="moderate"] .result-label { color: #76561d; }
 [data-outcome="low"] .result-label { color: var(--green); }
 .result-note { margin-top: 9px; color: var(--muted); font-size: 14px; line-height: 1.45; }
 .research-note { border-radius: 12px; padding: 12px 16px; background: var(--note); color: #493b29; }

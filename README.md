@@ -84,7 +84,7 @@ or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
 the 600 × 450 crop, and the preview traces the detected area. The MEL/NV
 classifier uses the lesion-centered crop with surrounding skin. Its score band
-determines whether the card shows **low risk**, **inconclusive**, or **high risk**.
+determines whether the card shows **low risk**, **moderate risk**, or **high risk**.
 The other-diagnosis route shows **low risk for melanoma** with its leading
 diagnosis as a possible match. The browser console logs the raw melanoma
 score or the score for the highest-ranked other diagnosis.

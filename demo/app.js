@@ -1,4 +1,4 @@
-const melanomaOutcomes = { below: 'low', low: 'inconclusive', moderate: 'inconclusive', high: 'high' };
+const melanomaOutcomes = { below: 'low', low: 'moderate', moderate: 'moderate', high: 'high' };
 
 const biopsyNote = 'Only a biopsy can give conclusive results.';
 const riskResults = {
@@ -6,8 +6,8 @@ const riskResults = {
     title: 'high risk',
     description: `The lesion exhibits typical characteristics of melanoma. However some moles can mimic these, too. ${biopsyNote}`,
   },
-  inconclusive: {
-    title: 'inconclusive',
+  moderate: {
+    title: 'moderate risk',
     description: `The lesion is not a typical melanoma but exhibits some of the risk markers of melanoma. ${biopsyNote}`,
   },
   low: {
