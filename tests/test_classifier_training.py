@@ -10,6 +10,7 @@ from PIL import Image
 
 from classifiers.catalog import MILK_DIAGNOSES
 from classifiers.dermfm_zero import WEIGHTS_SHA256
+from classifiers.export_padded_crop import PaddedCropScoreModel, head_tensors
 from classifiers.model import TASK_LABELS, DermFMClassifier, Task
 from classifiers.score_bands import melanoma_score_band
 from classifiers.train import TrainingConfig, TrainingData, calibration_mask, evaluate_model, fit_frozen_head, fit_model, save_model
@@ -88,5 +89,8 @@ class ClassifierTrainingTest(TestCase):
                     np.testing.assert_allclose(score, predictions["holdout"].at[sample_id, "score_MEL"], rtol=1e-6)
                     if task == "padded_crop":
                         self.assertEqual(result["melanoma_score_band"], melanoma_score_band(score, reloaded.cutoff))
+                        cam_model = PaddedCropScoreModel(reloaded.encoder, head_tensors(reloaded.heads), config.device)
+                        cam_score = cam_model.score_embeddings(torch.tensor(sample[None])).item()
+                        np.testing.assert_allclose(cam_score, score, rtol=1e-6)
                     else:
                         self.assertNotIn("melanoma_score_band", result)

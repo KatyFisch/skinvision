@@ -14,10 +14,11 @@ from threading import Lock
 import torch
 from PIL import Image, ImageOps
 
-from classifiers.lesion_crop import crop_with_skin_margin, frame_photo
+from classifiers.lesion_crop import crop_with_skin_margin, frame_photo, skin_margin_box
 from classifiers.model import DermFMClassifier
 from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import PhotoClassifier
+from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
 from demo.samples import SAMPLE_ASSETS, SAMPLE_FOLDER, available_samples
 from demo.segmentation import outline_path, overlay_png
 
@@ -89,8 +90,17 @@ class DemoHandler(BaseHTTPRequestHandler):
 
                 result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
                 if self.padded_crop:
-                    result.update(self.classifier.predict(crop_with_skin_margin(photo, mask)))
+                    prepared = crop_with_skin_margin(photo, mask)
+                    result.update(self.classifier.predict(prepared))
                     result["analysis_input"] = "padded_crop" if has_mask else "original_photo"
+                    if stream and isinstance(self.classifier, DermFMClassifier) and (box := skin_margin_box(photo, mask)) is not None:
+                        try:
+                            heat = padded_crop_heatmap(prepared, self.classifier, str(result["research_prediction"]))
+                            overlay_image = heatmap_overlay(heat, mask, box)
+                            if overlay_image is not None:
+                                result["heatmap"] = overlay_image
+                        except RuntimeError as error:
+                            self.log_error("Grad-CAM unavailable: %s", error)
                 elif has_mask:
                     masked = Image.composite(photo, Image.new("RGB", photo.size), mask)
                     result.update(self.classifier.predict(masked))

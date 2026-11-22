@@ -54,6 +54,8 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 #preview:focus-visible { outline: 2px solid #abc6ad; outline-offset: -2px; }
 .is-panning #preview { cursor: grabbing; }
 .crop-grid { position: absolute; inset: 0; pointer-events: none; opacity: .7; background: linear-gradient(90deg, transparent calc(100% - 1px), #fff9 0) 0 0 / calc(100% / 3) 100% repeat-x, linear-gradient(transparent calc(100% - 1px), #fff9 0) 0 0 / 100% calc(100% / 3) repeat-y; transition: opacity 180ms var(--ease-out); }
+.heatmap-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; animation: pulse-heatmap 3.4s ease-in-out infinite; }
+.heatmap-note { margin-bottom: 6px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .lesion-outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .lesion-outline path { stroke-width: 2.75px; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 1px #251827a6); }
 .lesion-outline stop:nth-child(1) { stop-color: #c4a3ff; }
@@ -143,6 +145,7 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .photo-guide li { display: grid; gap: 2px; align-content: start; }
 .photo-guide li span { color: var(--muted); font-size: 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-heatmap { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 @keyframes appear { from { opacity: 0; transform: translateY(3px); } }
 @keyframes draw-outline {
   from { stroke-dasharray: 1; stroke-dashoffset: 1; }
@@ -183,5 +186,6 @@ h1, h2, p, ul, dl, dd { margin: 0; }
   .result-placeholder.is-fading { animation: none; }
   .is-segmenting .mask-scan-line { animation: none; }
   .analysis-percent { display: none; animation: none; }
+  .heatmap-overlay { animation: none; }
   .has-outline .lesion-outline path, .has-outline .lesion-outline stop { animation: none; }
 }

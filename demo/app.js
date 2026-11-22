@@ -25,6 +25,8 @@ const choose = document.getElementById('choose');
 const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('preview'));
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
+const heatmapOverlay = /** @type {HTMLImageElement} */ (document.getElementById('heatmap-overlay'));
+const heatmapNote = document.getElementById('heatmap-note');
 const lesionPath = document.getElementById('lesion-path');
 const maskScanLine = document.getElementById('mask-scan-line');
 const cropControls = document.getElementById('crop-controls');
@@ -52,6 +54,7 @@ let selection = 0;
 let crop;
 let drag;
 let request;
+let heatmapUrl;
 
 function showError(message = '') {
   error.textContent = message;
@@ -74,6 +77,13 @@ function showResult(state) {
 }
 
 function showPrediction(data) {
+  if (data.heatmap) {
+    const png = Uint8Array.from(atob(data.heatmap), (character) => character.charCodeAt(0));
+    heatmapUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+    heatmapOverlay.src = heatmapUrl;
+    heatmapOverlay.hidden = false;
+    heatmapNote.hidden = false;
+  }
   const bandLabel = melanomaBands[data.melanoma_score_band];
   document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
   document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
@@ -89,15 +99,20 @@ function showPrediction(data) {
   showResult('done');
 }
 
-function clearOutline() {
+function clearAnalysisPreview() {
   cropFrame.classList.remove('is-segmenting', 'has-outline');
   lesionPath.removeAttribute('d');
+  heatmapOverlay.hidden = true;
+  heatmapNote.hidden = true;
+  heatmapOverlay.removeAttribute('src');
+  if (heatmapUrl) URL.revokeObjectURL(heatmapUrl);
+  heatmapUrl = undefined;
 }
 
 function clearAnalysis() {
   request?.abort();
   request = undefined;
-  clearOutline();
+  clearAnalysisPreview();
   showError();
   showResult('idle');
 }
@@ -351,7 +366,7 @@ analyze.addEventListener('click', async () => {
   const pending = new AbortController();
   request = pending;
   showError();
-  clearOutline();
+  clearAnalysisPreview();
   cropFrame.classList.add('is-segmenting');
   showResult('segmenting');
   const scanFinished = finishAnimations(maskScanLine);

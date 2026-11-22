@@ -34,6 +34,7 @@
           </div>
           <div class="crop-frame" id="crop-frame" hidden>
             <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
+            <img class="heatmap-overlay" id="heatmap-overlay" alt="" aria-hidden="true" hidden>
             <svg class="lesion-outline" viewBox="0 0 600 450" aria-hidden="true">
               <defs>
                 <linearGradient id="lesion-gradient" x1="0%" y1="28%" x2="100%" y2="72%">
@@ -49,6 +50,7 @@
           </div>
         </div>
         <div class="crop-controls" id="crop-controls" hidden>
+          <p class="heatmap-note" id="heatmap-note" hidden>Grad-CAM shown inside the lesion outline</p>
           <div class="crop-meta">
             <p id="crop-help">Drag the photo or use arrow keys to frame it.</p>
             <span>600 × 450 px</span>

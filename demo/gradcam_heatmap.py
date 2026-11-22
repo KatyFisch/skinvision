@@ -1,13 +1,12 @@
 """
-Generate a Grad-CAM heatmap for a new image using the trained model
-from explain_classification.ipynb.
+Generate Grad-CAM heatmaps for the demo and the explanation notebook.
 
 The returned heatmap is a 2D NumPy array with values between 0 and 1.
 No plot or heatmap overlay is created.
 
 Example
 -------
-from gradcam import load_model, generate_heatmap
+from demo.gradcam_heatmap import load_model, generate_heatmap
 
 model = load_model("../models/mel-vs-nv-full.pth")
 heatmap = generate_heatmap("path/to/new_image.jpg", model)
@@ -16,15 +15,26 @@ print(heatmap.shape)  # (image_height, image_width)
 print(heatmap.min(), heatmap.max())
 """
 
+from base64 import b64encode
+from collections.abc import Callable
+from io import BytesIO
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import torch
 from PIL import Image
-from torch import nn
-from torchvision import transforms
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+from torch import nn
+from torchvision import transforms
+
+from classifiers import dermfm_zero
+from classifiers.export_padded_crop import PaddedCropScoreModel, head_tensors
+from classifiers.model import DermFMClassifier
+
+HEAT_THRESHOLD = 0.55
+MAX_HEATMAP_ALPHA = round(0.75 * 255)
 
 
 class GradCAMWrapper(nn.Module):
@@ -36,6 +46,26 @@ class GradCAMWrapper(nn.Module):
 
     def forward(self, x):
         return self.model(x)[0].reshape(-1, 1)
+
+
+def tensor_heatmap(
+    model: nn.Module,
+    image: torch.Tensor,
+    target_layer: nn.Module,
+    target_category: int,
+    reshape_transform: Callable[[torch.Tensor], torch.Tensor] | None = None,
+) -> np.ndarray:
+    # Grad-CAM accepts callable targets even though its annotation says Module.
+    targets = cast(list[nn.Module], [ClassifierOutputTarget(target_category)])
+    maps = None
+    with torch.enable_grad(), GradCAM(model=model, target_layers=[target_layer], reshape_transform=reshape_transform) as cam:
+        maps = cam(input_tensor=image.requires_grad_(True), targets=targets)
+    if maps is None:
+        raise RuntimeError("Grad-CAM did not return a heatmap")
+    heat = np.asarray(maps[0], dtype=np.float32)
+    if not np.isfinite(heat).all():
+        raise RuntimeError("Grad-CAM returned non-finite values")
+    return np.clip(heat, 0.0, 1.0)
 
 
 def load_model(model_path, device=None):
@@ -110,10 +140,40 @@ def generate_heatmap(image, model, target_category=0, device=None):
 
     target_layer = model.get_submodule(f"folds.{first_fold_name}.encoder.layer4.1.conv2")
 
-    cam = GradCAM(model=cam_model, target_layers=[target_layer])
+    return tensor_heatmap(cam_model, input_tensor, target_layer, target_category)
 
-    grayscale_cam = cam(input_tensor=input_tensor, targets=[ClassifierOutputTarget(target_category)])
 
-    # Grad-CAM returns (batch, height, width); return the first image.
-    heatmap = np.asarray(grayscale_cam[0], dtype=np.float32)
-    return np.clip(heatmap, 0.0, 1.0)
+def padded_crop_heatmap(photo: Image.Image, classifier: DermFMClassifier, prediction: str) -> np.ndarray:
+    encoder = classifier.encoder
+    device = classifier.device
+    model = PaddedCropScoreModel(encoder, head_tensors(classifier.heads), device)
+    image = cast(torch.Tensor, classifier.preprocess(photo)).unsqueeze(0).to(device=device, dtype=dermfm_zero.clinical_dtype(device))
+    patch_height, patch_width = encoder.patch_embed.patch_size
+    height, width = image.shape[-2:]
+    padded = nn.functional.pad(image, (0, -width % patch_width, 0, -height % patch_height))
+    rows, columns = padded.shape[-2] // patch_height, padded.shape[-1] // patch_width
+
+    def reshape(tokens: torch.Tensor) -> torch.Tensor:
+        patches = tokens[:, encoder.num_prefix_tokens :]
+        return patches.reshape(tokens.shape[0], rows, columns, tokens.shape[-1]).permute(0, 3, 1, 2).float()
+
+    layer = encoder.get_submodule(f"blocks.{len(encoder.blocks) - 1}.norm1")
+    heat = tensor_heatmap(model, padded, layer, classifier.labels.index(prediction), reshape)
+    return heat[:height, :width]
+
+
+def heatmap_overlay(heatmap: np.ndarray, mask: Image.Image, box: tuple[int, int, int, int]) -> str | None:
+    left, top, right, bottom = box
+    aligned = Image.new("F", mask.size)
+    resized = Image.fromarray(heatmap).resize((right - left, bottom - top), Image.Resampling.BILINEAR)
+    aligned.paste(resized, (left, top))
+    strength = np.clip((np.asarray(aligned) - HEAT_THRESHOLD) / (1 - HEAT_THRESHOLD), 0, 1)
+    strength = np.where(np.asarray(mask) > 0, strength, 0)
+
+    alpha = np.rint(np.sqrt(strength) * MAX_HEATMAP_ALPHA).astype(np.uint8)
+    if not alpha.any():
+        return None
+    rgba = np.stack((np.full_like(alpha, 255), np.rint(205 - 160 * strength).astype(np.uint8), np.full_like(alpha, 55), alpha), axis=-1)
+    with BytesIO() as buffer:
+        Image.fromarray(rgba).save(buffer, format="PNG")
+        return b64encode(buffer.getvalue()).decode("ascii")
