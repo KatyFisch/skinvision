@@ -21,7 +21,7 @@ run, the demo also fetches the router and U-Net checkpoints using your Git acces
 to this repository.
 
 [Watch the demo (MP4)](docs/skinvision-demo.mp4) to see the app analyze
-**Melanoma close-up** and **Cherry angioma**.
+**Melanoma close-up** and **BCC on back**.
 
 For training, download the images, metadata, supplemental metadata, and ground
 truth from [ISIC’s MILK10k downloads](https://challenge.isic-archive.com/data/#milk10k).
