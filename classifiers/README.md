@@ -14,9 +14,8 @@ to go from the raw MILK10k release to a saved model and a prediction.
    notebook. Set `SEGMENTATION_MODEL` to the exported `.pth` file. The direct
    11-class workflow uses the original clinical photos.
    [Segmentation notebook](../notebooks/segmentation.ipynb)
-4. To classify a sample in the final cell, point `SAMPLE_PHOTO` to a curated
-   JPEG or PNG, or install the sample gallery with
-   `uv run --locked python -m demo.samples`.
+4. The final cell defaults to a bundled gallery sample. Set `SAMPLE_PHOTO`
+   to try another curated JPEG or PNG.
 
 Launch JupyterLab from the repository root.
 

@@ -14,6 +14,7 @@ from PIL import Image, ImageOps
 COMMONS = "https://commons.wikimedia.org/wiki/File:"
 UPLOADS = "https://upload.wikimedia.org/wikipedia/commons/"
 SAMPLE_FOLDER = "demo-samples"
+BUNDLED_SAMPLE_DIR = Path(__file__).resolve().parent / "assets" / SAMPLE_FOLDER
 
 
 @dataclass(frozen=True)

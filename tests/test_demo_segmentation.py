@@ -36,6 +36,23 @@ class DemoSegmentationTest(TestCase):
             self.photo.save(buffer, format="PNG")
             self.client.request("POST", "/api/predict", buffer.getvalue(), {"Content-Type": "application/octet-stream", "Accept": accept})
 
+    def test_gallery_serves_all_bundled_photos(self) -> None:
+        self.start_client()
+        self.client.request("GET", "/api/samples")
+        with self.client.getresponse() as response:
+            self.assertEqual(response.status, 200)
+            samples = json.load(response)
+        self.assertEqual(len(samples), 5)
+        for sample in samples:
+            with self.subTest(url=sample["url"]):
+                self.assertTrue(sample["credit"] and sample["license"] and sample["source"])
+                self.client.request("GET", sample["url"])
+                with self.client.getresponse() as response:
+                    self.assertEqual(response.status, 200)
+                    self.assertEqual(response.getheader("Content-Type"), "image/jpeg")
+                    with Image.open(BytesIO(response.read())) as photo:
+                        self.assertEqual(photo.size, self.photo.size)
+
     def test_streams_outline_before_returning_prediction_on_the_same_mask(self) -> None:
         self.start_client()
         self.mask.paste(255, (200, 120, 390, 290))

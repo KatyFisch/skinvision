@@ -94,12 +94,12 @@ checkpoints referenced by that file at their saved relative paths. The cascade
 uses the black-background input and shows a melanoma outcome on its
 MEL-vs-NV branch.
 
-To populate **Sample photos**, install the five public-domain or CC0 examples
-with `uv run --locked python -m demo.samples` (requires `curl`). The 600 × 450 JPEGs
-are stored under `data/demo-samples/` and can be used offline after setup. The
-gallery includes the source and license for every photo, including two
-melanoma examples from the National Cancer Institute. If you run the demo
-with `MILK10K_DATA_DIR`, use the same setting when preparing the samples.
+The five 600 × 450 **Sample photos** are included in
+[`demo/assets/demo-samples/`](demo/assets/demo-samples/) and available offline.
+The gallery lists each image's source, author, and license, including two
+melanoma examples from the National Cancer Institute. To regenerate the
+bundled crops from their verified sources, run
+`uv run --locked python -m demo.samples --data-dir demo/assets` from the repository root.
 
 ## Attribution
 

@@ -19,7 +19,7 @@ from classifiers.lesion_crop import crop_with_skin_margin, frame_photo, skin_mar
 from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import PhotoClassifier
 from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
-from demo.samples import SAMPLE_ASSETS, SAMPLE_FOLDER, available_samples
+from demo.samples import BUNDLED_SAMPLE_DIR, SAMPLE_ASSETS, available_samples
 from demo.segmentation import outline_path, overlay_png
 
 ROOT = Path(__file__).resolve().parent
@@ -40,7 +40,7 @@ class DemoHandler(BaseHTTPRequestHandler):
         segmenter: LesionSegmenter,
         inference_lock: LockType,
         padded_crop: bool = False,
-        samples_dir: Path = ROOT.parent / "data" / SAMPLE_FOLDER,
+        samples_dir: Path = BUNDLED_SAMPLE_DIR,
         **kwargs,
     ) -> None:
         self.classifier = classifier
@@ -202,14 +202,7 @@ def main() -> None:
     torch.set_num_threads(min(4, torch.get_num_threads()))
     classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
     segmenter = LesionSegmenter(checkpoint, device)
-    handler = partial(
-        DemoHandler,
-        classifier=classifier,
-        segmenter=segmenter,
-        inference_lock=Lock(),
-        padded_crop=padded_crop,
-        samples_dir=data_dir / SAMPLE_FOLDER,
-    )
+    handler = partial(DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), padded_crop=padded_crop)
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
         print(f"SkinVision is running at http://127.0.0.1:{server.server_port}", flush=True)
         try:
