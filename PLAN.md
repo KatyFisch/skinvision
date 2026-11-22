@@ -1,9 +1,9 @@
 # SkinVision project plan
 
-The goal is an educational app that suggests possible skin lesion diagnoses from
-an ordinary phone photo. Develop three classifiers on the paired MILK10k images
-first. The app will use one to route a photo to either a MEL-vs-NV specialist or
-a classifier covering the nine other MILK10k diagnoses.
+The goal is an educational app that explores possible skin lesion diagnoses
+from an ordinary phone photo. The current classifier workflow uses MILK10k
+clinical photos, with one MEL-vs-NV model for the local demo and one model
+covering all 11 diagnosis codes.
 
 ## What we verified about MILK10k
 
@@ -64,102 +64,39 @@ questions before we train a model.
 **Done when** both collaborators can run the notebook and agree on the unit of
 analysis, label mapping, and known limits on splitting and evaluation.
 
-## 2. Use one split across all three classifiers
+## 2. Train and evaluate the retained classifiers
 
-- Use the [MEL-vs-NV manifest](classifiers/eval_split/README.md) for the specialist.
-  Prepare the router and other-diagnosis manifests from the preprocessed image
-  catalog and the frozen parent MILK10k assignments. The 20% holdout and three
-  development folds stay fixed across all three tasks.
-- Keep both views of each lesion and known duplicates together. Group by patient
-  if IDs become available. Fit models and choose thresholds using the
-  development folds. Evaluate the finalized models and routing rules on the
-  held-out lesions.
+Run the [training notebook](notebooks/02_train_classifiers.ipynb) from the
+raw MILK10k release. It uses the frozen split, prepares clinical close-ups,
+fits the three-member ensemble, calibrates its melanoma cutoff on reserved
+development groups, reports holdout performance, and saves and reloads the
+model. Both tasks use a frozen DermFM-Zero-Open encoder.
 
-## 3. Train the three paired-image classifiers
+- **Padded-crop MEL vs. NV.** Keep lesion context for the demo and fall back
+  to the original frame when the U-Net returns an empty mask.
+- **Direct 11-class.** Score all MILK10k diagnoses on the original clinical
+  frame. Apply the calibrated melanoma cutoff and show the highest-scoring
+  remaining diagnosis for photos below the cutoff in research evaluations.
 
-1. **MEL vs. NV specialist.** Train on melanomas (`MEL`) and melanocytic nevi
-   (`NV`). Agree on an exploratory melanoma sensitivity target with the
-   biostatistics collaborator and compare specificity against nevi at that
-   target. Report missed melanomas, flagged nevi, and uncertainty.
-2. **MEL-or-NV vs. other router.** Use every MILK10k diagnosis. Combine `MEL`
-   and `NV` into one target and map the other nine diagnoses to `Other`. Measure
-   how often melanomas and nevi reach the specialist, and which other diagnoses
-   are mistakenly sent there.
-3. **Other-diagnosis classifier.** Train it on the nine MILK10k categories
-   outside `MEL` and `NV`, and use it for cases routed to `Other`. Report macro
-   F1, per-class recall with case counts, and a confusion matrix.
+Use the same [frozen assignments](classifiers/eval_split/README.md) for both
+tasks. Keep paired images and exact duplicates together. Group by patient
+when those identifiers are available. Report melanoma sensitivity and
+specificity with counts and uncertainty. For the 11-class model, also report
+macro F1, per-class recall with counts, and a confusion matrix.
 
-Start each task with a majority-class reference and a small pretrained image
-encoder. Combine features from the clinical and dermoscopic views into one
-prediction per lesion. Use the full native-resolution frame when training the
-specialist, router, and other-diagnosis classifier. Keep filenames,
-identifiers, and the diagnostic supplement out of model features. Fine-tune
-or revisit segmentation when validation errors give a reason to try it.
+The [experiment record](docs/classifier-experiments.md) covers the models
+retired from training, their results, and why the current recipes were selected.
 
-Evaluate approximate age as an optional input for the MEL-vs-NV specialist.
-Compare images alone with images plus age on the same development folds, and
-report melanoma sensitivity by age group. Use the image-only model as the
-fallback when age is omitted. Use recorded sex for dataset audits only.
+## 3. Test the phone-photo workflow with curated examples
 
-When the separate MEL/NV dataset is available, check usage terms, label
-definitions, image modalities, and overlap with the MILK10k holdout. Compare the
-specialist trained on MILK10k alone with a version that uses the additional
-data. Keep source-specific evaluation so we can see whether any gain transfers
-between datasets.
-
-## 4. Route and evaluate the full pipeline
-
-- Run the router first. Send `MEL-or-NV` cases to the specialist and `Other`
-  cases to the other-diagnosis classifier. The `Other` group includes benign
-  conditions and cancers such as basal cell carcinoma.
-- Tune routing on the development folds and test an inconclusive response for
-  uncertain assignments.
-- Measure melanoma sensitivity from input to final output on the holdout.
-  Track whether missed melanomas came from routing or classification, and
-  report how often the system returns an inconclusive result. Inspect results
-  by skin tone wherever counts support it.
-
-## 5. Test the phone-photo workflow and build a private demo
-
-- For the two-label MEL-vs-NV demo, use the DermFM-Zero-Open padded-crop head.
-  Use the original crop when the U-Net returns an empty mask, as in the
-  skin-context experiment. Keep the original-photo head as the comparison
-  baseline. Blacking out the background reduced holdout melanoma recall and
-  nevus specificity.
-  [Masked versus original clinical photos](classifiers/README.md#compare-masking-for-mel-vs-nv)
-- Dimming the background while retaining a rim of skin improved specificity
-  at retrospectively matched sensitivity. Its locked cutoff missed the
-  sensitivity target. Retain it as an experiment for further calibration.
-  The padded crop was close to the original-photo baseline.
-  [Context-preserving segmentation comparison](classifiers/README.md#keep-surrounding-skin)
-- The [single-photo pipeline](classifiers/README.md#run-the-single-photo-pipeline)
-  uses clinical-only MILK10k models for all three stages. The first holdout
-  run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked
-  development cutoffs. Improve specificity and evaluate the pipeline
-  separately on self-taken photos.
-- Carry forward the direct 11-class head on frozen DermFM-Zero-Open features
-  as the candidate for the private diagnosis demo. It flagged 86 of 90 melanomas
-  and 309 of 958 non-melanomas on the clinic-photo holdout. The binary
-  melanoma-vs-rest head flagged 89 of 90 melanomas and 360 of 958
-  non-melanomas and is the candidate for dedicated melanoma flagging.
-  [Clinical classifier comparison](classifiers/README.md#compare-three-single-photo-classifier-designs)
-- Carry forward the clinical MEL-vs-NV model trained on the original
-  600 × 450 photos, with five epochs of fine-tuning and a refitted head.
-  The three selected development checkpoints are in
-  `data/models/clinical-mel-nv/`.
-  In the earlier center-crop augmentation experiment, the originals-only run
-  flagged 112 of 149 nevi and the expanded augmentation run flagged 113 at
-  the same sensitivity of 86 out of 90 melanomas.
-  [Clinical augmentation experiment](classifiers/augmentation/README.md)
+- Keep the demo private and use curated, licensed examples. The current app
+  uses the padded-crop model and can still load the historical cascade.
 - Look for independently labeled, self-taken phone photos from the intended
   population. Check label compatibility and measure the effect of device,
   lighting, skin tone, image quality, and unfamiliar conditions. Test how often
   the model abstains and how often it makes errors among the remaining cases.
   Choose any abstention rule on development data and verify it on independent
   data, including out-of-scope photos.
-- Use curated, licensed examples in a local demo. Show the model's possible
-  categories and an inconclusive state. Include melanoma look-alikes and other
-  lesion types in later evaluations of the phone-photo workflow.
 - Treat public predictions on real user photos as a separate decision. Before
   pursuing that use, review the independent evidence with a dermatologist and
   address how people interpret the output, privacy for uploaded images, dataset
