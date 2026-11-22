@@ -1,4 +1,4 @@
-"""Download and crop the public-domain photos for the local demo gallery."""
+"""Download and crop freely reusable photos for the local demo gallery."""
 
 import argparse
 import os
@@ -103,6 +103,26 @@ SAMPLES = (
         "9/93/Queratose_seborreica_1.jpg",
         "f82e58bca1fa0f2dee188393fc63339d9aa429edd20c34f4ef4784d7781630cd",
         (0, 180, 552, 594),
+    ),
+    Sample(
+        "cherry-angioma",
+        "Cherry angioma",
+        "JOAN",
+        "CC BY 4.0",
+        "Angioma_cereza_en_hombro.jpg",
+        "4/47/Angioma_cereza_en_hombro.jpg",
+        "2b7d7197506417f4bb66c636e9aa66ae1afd4c5408d76e96ee41f83428b7937d",
+        (1610, 3092, 3310, 4367),
+    ),
+    Sample(
+        "bcc-on-back",
+        "BCC on back",
+        "John Hendrix, MD",
+        "Public domain",
+        "Basal_cell_carcinoma.jpg",
+        "4/4f/Basal_cell_carcinoma.jpg",
+        "93c59b87181fb68d46f507d29da7f8c8e4f565fd91aba05892657bc4969a9ee8",
+        (21, 1, 531, 383),
     ),
 )
 SAMPLE_ASSETS = {f"/samples/{sample.filename}": sample for sample in SAMPLES}

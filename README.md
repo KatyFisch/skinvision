@@ -124,12 +124,16 @@ checkpoints referenced by that file at their saved relative paths. The cascade
 uses the black-background input and shows a melanoma outcome on its
 MEL-vs-NV branch.
 
-The seven 600 × 450 **Sample photos** are included in
+The nine 600 × 450 **Sample photos** are included in
 [`demo/assets/demo-samples/`](demo/assets/demo-samples/) and available offline.
-The gallery includes melanoma, nevi, basal cell carcinoma, and seborrheic
-keratosis, with each photo's source, author, and license. To regenerate the
-bundled crops from their verified sources, run
+The gallery shows each photo's source, author, and license. At default framing,
+**Cherry angioma** and **BCC on back** exercise the other-diagnosis route
+with the bundled models. To regenerate the bundled crops, run
 `uv run --locked python -m demo.samples --data-dir demo/assets` from the repository root.
+
+**Cherry angioma** is a cropped and resized copy of JOAN's
+[Angioma cereza en hombro](https://commons.wikimedia.org/wiki/File:Angioma_cereza_en_hombro.jpg),
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## Attribution
 
