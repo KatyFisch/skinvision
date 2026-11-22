@@ -14,8 +14,8 @@ from threading import Lock
 import torch
 from PIL import Image, ImageOps
 
+from classifiers.export_padded_crop import PaddedCropTorchModel
 from classifiers.lesion_crop import crop_with_skin_margin, frame_photo, skin_margin_box
-from classifiers.model import DermFMClassifier
 from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import PhotoClassifier
 from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
@@ -36,7 +36,7 @@ class DemoHandler(BaseHTTPRequestHandler):
     def __init__(
         self,
         *args,
-        classifier: PhotoClassifier | DermFMClassifier,
+        classifier: PhotoClassifier | PaddedCropTorchModel,
         segmenter: LesionSegmenter,
         inference_lock: LockType,
         padded_crop: bool = False,
@@ -93,7 +93,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                     prepared = crop_with_skin_margin(photo, mask)
                     result.update(self.classifier.predict(prepared))
                     result["analysis_input"] = "padded_crop" if has_mask else "original_photo"
-                    if stream and isinstance(self.classifier, DermFMClassifier) and (box := skin_margin_box(photo, mask)) is not None:
+                    if stream and isinstance(self.classifier, PaddedCropTorchModel) and (box := skin_margin_box(photo, mask)) is not None:
                         try:
                             heat = padded_crop_heatmap(prepared, self.classifier, str(result["research_prediction"]))
                             result["heatmap"] = heatmap_overlay(heat, mask, box)
@@ -171,9 +171,13 @@ class DemoHandler(BaseHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     data_dir = Path(os.environ.get("MILK10K_DATA_DIR", ROOT.parent / "data")).expanduser()
-    padded_model = data_dir / "models/padded-crop"
-    default_model = padded_model if padded_model.is_dir() else data_dir / "models/single-photo/model.json"
-    parser.add_argument("--model", type=Path, default=default_model, help="A padded-crop experiment directory or a legacy model.json")
+    default_model = ROOT.parent / "models/mel-vs-nv-padded-crop.pth"
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=default_model,
+        help="Exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json",
+    )
     segmentation_model = ROOT.parent / "models/unet_segmentation_full"
     if not segmentation_model.is_dir():
         segmentation_model = segmentation_model.with_suffix(".pth")
@@ -184,18 +188,19 @@ def main() -> None:
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     args = parser.parse_args()
     model = args.model.expanduser()
-    padded_crop = model.is_dir()
-    if padded_crop:
+    run_dir = model.is_dir()
+    if run_dir:
         if not all((model / name).is_file() for name in ("metrics.json", "heads.joblib")):
             parser.error("Pass --model with the padded-crop run directory containing metrics.json and heads.joblib.")
     elif not model.is_file():
-        parser.error("Pass --model with a padded-crop run directory or a legacy model.json.")
+        parser.error("Pass --model with exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json.")
+    padded_crop = run_dir or model.suffix == ".pth"
     checkpoint = args.segmentation_model.expanduser()
     if not (checkpoint.is_file() or (checkpoint / "data.pkl").is_file()):
         parser.error("Pass --segmentation-model with the U-Net checkpoint or its extracted folder.")
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    classifier = DermFMClassifier(model, data_dir, device, expected_task="padded_crop") if padded_crop else PhotoClassifier(model, device)
+    classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
     segmenter = LesionSegmenter(checkpoint, device)
     handler = partial(
         DemoHandler,

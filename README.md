@@ -60,13 +60,21 @@ extracted checkpoint in `models/unet_segmentation_full/`. Use
 `--segmentation-model` to load it from another location.
 
 ```sh
-uv run --locked python -m demo --model data/models/padded-crop
+uv run --locked python -m demo
 ```
 
-Point `data/models/padded-crop` at a saved padded-crop model directory containing
-`heads.joblib` and `metrics.json`. The demo uses that path by default when it
-exists. Pass the directory from the notebook's save step with `--model` to use
-a newly trained model.
+The demo uses the fitted heads in `models/mel-vs-nv-padded-crop.pth` from Git
+and reuses the DermFM encoder downloaded by the training notebook. Keep
+`MILK10K_DATA_DIR` set to the same directory if you set it for the notebook.
+If you still need the encoder, follow the [classifier setup](classifiers/README.md#set-up)
+to enable the first-run download.
+
+To try a newly trained model, pass the directory from the notebook's save step
+containing `heads.joblib` and `metrics.json`.
+
+```sh
+uv run --locked python -m demo --model data/models/padded-crop
+```
 
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change

@@ -1,15 +1,19 @@
 """Export the fitted MEL-vs-NV heads as a PyTorch checkpoint."""
 
 import argparse
+import math
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import torch
+from PIL import Image
 from sklearn.pipeline import Pipeline
 from torch import nn
 
 from classifiers import dermfm_zero
-from classifiers.model import load_classifier_run
+from classifiers.model import TASK_LABELS, load_classifier_run
+from classifiers.score_bands import melanoma_score_band
 
 FORMAT = "skinvision.padded-crop.v1"
 
@@ -63,12 +67,41 @@ class PaddedCropScoreModel(nn.Module):
 
 
 class PaddedCropTorchModel(PaddedCropScoreModel):
+    encoder: dermfm_zero.DermFMVisionTransformer
+    labels = TASK_LABELS["padded_crop"]
+
     def __init__(self, checkpoint_path: Path, data_dir: Path, device: torch.device) -> None:
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-        if checkpoint["format"] != FORMAT or checkpoint["encoder_sha256"] != dermfm_zero.WEIGHTS_SHA256:
-            raise ValueError("Expected exported padded-crop heads for the pinned DermFM-Zero-Open encoder")
-        super().__init__(dermfm_zero.load_clinical_encoder(data_dir, device), checkpoint, device)
-        self.cutoff: float = checkpoint["cutoff"]
+        if checkpoint_path.is_dir():
+            _, cutoff, heads = load_classifier_run(checkpoint_path, expected_task="padded_crop")
+            tensors = head_tensors(heads)
+        else:
+            checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+            if checkpoint["format"] != FORMAT or checkpoint["encoder_sha256"] != dermfm_zero.WEIGHTS_SHA256:
+                raise ValueError("Expected exported padded-crop heads for the pinned DermFM-Zero-Open encoder")
+            cutoff = float(checkpoint["cutoff"])
+            tensors = checkpoint
+            if not 0 <= cutoff <= 1:
+                raise ValueError("Expected a valid MEL cutoff in the padded-crop checkpoint")
+        super().__init__(dermfm_zero.load_clinical_encoder(data_dir, device), tensors, device)
+        self.cutoff = cutoff
+        self.device = device
+        self.preprocess = dermfm_zero.clinical_preprocess()
+
+    def image_tensor(self, photo: Image.Image) -> torch.Tensor:
+        image = cast(torch.Tensor, self.preprocess(photo)).unsqueeze(0)
+        return image.to(device=self.device, dtype=dermfm_zero.clinical_dtype(self.device))
+
+    @torch.inference_mode()
+    def predict(self, photo: Image.Image) -> dict[str, str | float | None]:
+        melanoma = self.score_embeddings(self.encoder(self.image_tensor(photo))).item()
+        if not math.isfinite(melanoma):
+            raise RuntimeError("The classifier returned an invalid melanoma score")
+        return {
+            "research_prediction": "MEL" if melanoma >= self.cutoff else "NV",
+            "route": "MEL_OR_NV",
+            "melanoma_score": melanoma,
+            "melanoma_score_band": melanoma_score_band(melanoma, self.cutoff),
+        }
 
 
 def main() -> None:

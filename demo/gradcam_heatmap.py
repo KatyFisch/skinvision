@@ -29,9 +29,7 @@ from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 from torch import nn
 from torchvision import transforms
 
-from classifiers import dermfm_zero
-from classifiers.export_padded_crop import PaddedCropScoreModel, head_tensors
-from classifiers.model import DermFMClassifier
+from classifiers.export_padded_crop import PaddedCropTorchModel
 
 HEAT_THRESHOLD = 0.40
 MAX_HEATMAP_ALPHA = round(0.75 * 255)
@@ -143,11 +141,9 @@ def generate_heatmap(image, model, target_category=0, device=None):
     return tensor_heatmap(cam_model, input_tensor, target_layer, target_category)
 
 
-def padded_crop_heatmap(photo: Image.Image, classifier: DermFMClassifier, prediction: str) -> np.ndarray:
+def padded_crop_heatmap(photo: Image.Image, classifier: PaddedCropTorchModel, prediction: str) -> np.ndarray:
     encoder = classifier.encoder
-    device = classifier.device
-    model = PaddedCropScoreModel(encoder, head_tensors(classifier.heads), device)
-    image = cast(torch.Tensor, classifier.preprocess(photo)).unsqueeze(0).to(device=device, dtype=dermfm_zero.clinical_dtype(device))
+    image = classifier.image_tensor(photo)
     patch_height, patch_width = encoder.patch_embed.patch_size
     height, width = image.shape[-2:]
     padded = nn.functional.pad(image, (0, -width % patch_width, 0, -height % patch_height))
@@ -158,7 +154,7 @@ def padded_crop_heatmap(photo: Image.Image, classifier: DermFMClassifier, predic
         return patches.reshape(tokens.shape[0], rows, columns, tokens.shape[-1]).permute(0, 3, 1, 2).float()
 
     layer = encoder.get_submodule(f"blocks.{len(encoder.blocks) - 1}.norm1")
-    heat = tensor_heatmap(model, padded, layer, classifier.labels.index(prediction), reshape)
+    heat = tensor_heatmap(classifier, padded, layer, classifier.labels.index(prediction), reshape)
     return heat[:height, :width]
 
 

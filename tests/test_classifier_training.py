@@ -10,7 +10,7 @@ from PIL import Image
 
 from classifiers.catalog import MILK_DIAGNOSES
 from classifiers.dermfm_zero import WEIGHTS_SHA256
-from classifiers.export_padded_crop import PaddedCropScoreModel, head_tensors
+from classifiers.export_padded_crop import PaddedCropTorchModel, export_heads
 from classifiers.model import TASK_LABELS, DermFMClassifier, Task
 from classifiers.score_bands import melanoma_score_band
 from classifiers.train import TrainingConfig, TrainingData, calibration_mask, evaluate_model, fit_frozen_head, fit_model, save_model
@@ -78,19 +78,27 @@ class ClassifierTrainingTest(TestCase):
                     output = save_model(config, data, model, provenance, reports, predictions, root)
                     sample_id = predictions["holdout"].index[-1]
                     sample = features[rows.index.get_loc(sample_id)]
+                    photo = Image.new("RGB", (16, 16))
                     with patch(
                         "classifiers.dermfm_zero.load_clinical_encoder", return_value=lambda _, encoded=sample: torch.tensor(encoded[None])
                     ):
                         reloaded = DermFMClassifier(output, root, config.device, expected_task=task)
-                        result = reloaded.predict(Image.new("RGB", (16, 16)))
+                        result = reloaded.predict(photo)
+                        if task == "padded_crop":
+                            exported = root / "heads.pth"
+                            export_heads(output, exported)
+                            demo_results = [PaddedCropTorchModel(path, root, config.device).predict(photo) for path in (output, exported)]
                     self.assertEqual(result["research_prediction"], predictions["holdout"].at[sample_id, "prediction"])
                     score = result["melanoma_score"]
                     assert isinstance(score, float)
                     np.testing.assert_allclose(score, predictions["holdout"].at[sample_id, "score_MEL"], rtol=1e-6)
                     if task == "padded_crop":
                         self.assertEqual(result["melanoma_score_band"], melanoma_score_band(score, reloaded.cutoff))
-                        cam_model = PaddedCropScoreModel(reloaded.encoder, head_tensors(reloaded.heads), config.device)
-                        cam_score = cam_model.score_embeddings(torch.tensor(sample[None])).item()
-                        np.testing.assert_allclose(cam_score, score, rtol=1e-6)
+                        for demo_result in demo_results:
+                            self.assertEqual(demo_result["research_prediction"], result["research_prediction"])
+                            self.assertEqual(demo_result["melanoma_score_band"], result["melanoma_score_band"])
+                            demo_score = demo_result["melanoma_score"]
+                            assert isinstance(demo_score, float)
+                            np.testing.assert_allclose(demo_score, score, rtol=1e-6)
                     else:
                         self.assertNotIn("melanoma_score_band", result)
