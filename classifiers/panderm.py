@@ -23,15 +23,20 @@ def build_panderm(checkpoint: Path, device: torch.device, dtype: torch.dtype) ->
     encoder = timm.create_model(
         "vit_base_patch16_224", num_classes=0, init_values=0.1, dynamic_img_size=True, dynamic_img_pad=True, weight_init="skip"
     )
-    for index in range(12):
+    convert_attention_weights(state, depth=12)
+    encoder.load_state_dict(state, strict=True)
+    return encoder.eval().requires_grad_(False).to(device=device, dtype=dtype)
+
+
+def convert_attention_weights(state: dict[str, torch.Tensor], *, depth: int) -> None:
+    """Map PanDerm's separate query/value biases and residual scales to timm."""
+    for index in range(depth):
         prefix = f"blocks.{index}"
         query = state.pop(f"{prefix}.attn.q_bias")
         value = state.pop(f"{prefix}.attn.v_bias")
         state[f"{prefix}.attn.qkv.bias"] = torch.cat((query, torch.zeros_like(value), value))
         state[f"{prefix}.ls1.gamma"] = state.pop(f"{prefix}.gamma_1")
         state[f"{prefix}.ls2.gamma"] = state.pop(f"{prefix}.gamma_2")
-    encoder.load_state_dict(state, strict=True)
-    return encoder.eval().requires_grad_(False).to(device=device, dtype=dtype)
 
 
 def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int) -> tuple[np.ndarray, dict[str, str], bool]:

@@ -18,7 +18,7 @@ from sklearn.metrics import average_precision_score, classification_report, conf
 from sklearn.pipeline import Pipeline
 from threadpoolctl import threadpool_limits
 
-from classifiers import panderm
+from classifiers import dermfm_zero, panderm
 from classifiers.catalog import MILK_DIAGNOSES, load_catalog
 from classifiers.encoders import encode_pairs
 from classifiers.eval_split.create_splits import FULL_MANIFEST_NAME
@@ -152,7 +152,11 @@ def evaluate(args: argparse.Namespace, device: torch.device) -> None:
     calibration = calibration_mask(rows)
     holdout = rows["split"].eq("test")
 
-    if args.encoder == panderm.NAME:
+    pretraining_audit = {}
+    if args.encoder == dermfm_zero.NAME:
+        pretraining_audit = {"pretraining_isic_id_overlap": dermfm_zero.pretraining_id_overlap(rows, data_dir)}
+        features, provenance, cache_hit = dermfm_zero.encode_clinical(rows, data_dir, device, args.batch_size)
+    elif args.encoder == panderm.NAME:
         features, provenance, cache_hit = panderm.encode_clinical(rows, data_dir, device, args.batch_size)
     else:
         features, provenance, cache_hit = encode_pairs(
@@ -188,6 +192,7 @@ def evaluate(args: argparse.Namespace, device: torch.device) -> None:
         },
         "targets": {"router": ROUTER_TARGET, "end_to_end": PIPELINE_TARGET},
         "cutoffs": cutoffs,
+        **pretraining_audit,
     }
     for name, scores in (("calibration", calibrate), ("holdout", test)):
         scored = classify(scores, cutoffs)
@@ -210,7 +215,7 @@ def main() -> None:
     default_data_dir = Path(os.environ.get("MILK10K_DATA_DIR", Path(__file__).resolve().parents[1] / "data"))
     parser.add_argument("--data-dir", type=Path, default=default_data_dir)
     parser.add_argument("--catalog", type=Path, default=Path("final_data.csv"))
-    parser.add_argument("--encoder", choices=["resnet18", panderm.NAME], required=True)
+    parser.add_argument("--encoder", choices=["resnet18", panderm.NAME, dermfm_zero.NAME], required=True)
     parser.add_argument("--batch-size", type=int, default=12)
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     args = parser.parse_args()

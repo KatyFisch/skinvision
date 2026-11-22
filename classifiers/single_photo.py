@@ -33,6 +33,8 @@ CLINICAL_VIEW = ["clinical_path"]
 OTHER_CLASSES = np.array(list(OTHER_DIAGNOSIS_TARGETS))
 ROUTER_TARGET = 0.99
 PIPELINE_TARGET = 0.95
+MODERATE_MELANOMA_SCORE = 0.50
+HIGH_MELANOMA_SCORE = 0.90
 NORMALIZE = build_preprocess(ENCODER, full_frame=True, native_resolution=True)
 
 
@@ -64,6 +66,17 @@ def decisions(scores: pd.DataFrame, cutoffs: Cutoffs) -> pd.DataFrame:
     to_specialist = scores["router_score"].ge(cutoffs.router)
     specialist = np.where(scores["melanoma_score"].ge(cutoffs.specialist), "MEL", "NV")
     return scores.assign(to_specialist=to_specialist, prediction=np.where(to_specialist, specialist, scores["other_prediction"]))
+
+
+def melanoma_score_band(score: float, specialist_cutoff: float) -> str:
+    """Describe the raw specialist score for the research demo."""
+    if score < specialist_cutoff:
+        return "below"
+    if score >= HIGH_MELANOMA_SCORE:
+        return "high"
+    if score >= MODERATE_MELANOMA_SCORE:
+        return "moderate"
+    return "low"
 
 
 def rate(count: int, total: int) -> dict:
@@ -216,16 +229,25 @@ class PhotoClassifier:
         self.routed, self.specialist = load_models(config["weights"], model_path.parent, device)
         self.device = device
 
-    def predict(self, photo: Image.Image) -> dict[str, str]:
+    def predict(self, photo: Image.Image) -> dict[str, str | float | None]:
         image = prepare_photo(ImageOps.exif_transpose(photo).convert("RGB")).unsqueeze(0).to(self.device)
         route, other = routing_scores(self.routed, image)
-        melanoma = specialist_scores(self.specialist, image) if route[0] >= self.cutoffs.router else [float("nan")]
-        scores = pd.DataFrame({"router_score": route, "melanoma_score": melanoma, "other_prediction": other})
+        melanoma = float(specialist_scores(self.specialist, image)[0]) if route[0] >= self.cutoffs.router else None
+        if melanoma is not None and not math.isfinite(melanoma):
+            raise RuntimeError("The specialist returned an invalid melanoma score")
+        scores = pd.DataFrame(
+            {"router_score": route, "melanoma_score": [melanoma if melanoma is not None else np.nan], "other_prediction": other}
+        )
         scored = decisions(scores, self.cutoffs).iloc[0]
-        return {"research_prediction": scored["prediction"], "route": "MEL_OR_NV" if scored["to_specialist"] else "OTHER"}
+        return {
+            "research_prediction": scored["prediction"],
+            "route": "MEL_OR_NV" if scored["to_specialist"] else "OTHER",
+            "melanoma_score": melanoma,
+            "melanoma_score_band": melanoma_score_band(melanoma, self.cutoffs.specialist) if melanoma is not None else None,
+        }
 
 
-def predict_photo(model_path: Path, photo: Path, device: torch.device) -> dict[str, str]:
+def predict_photo(model_path: Path, photo: Path, device: torch.device) -> dict[str, str | float | None]:
     with Image.open(photo.expanduser()) as image:
         return PhotoClassifier(model_path, device).predict(image)
 

@@ -12,12 +12,22 @@ const labels = {
   VASC: 'Blood vessel lesions or bleeding',
 };
 
+const melanomaBands = {
+  below: 'Below melanoma cutoff',
+  low: 'Low melanoma signal',
+  moderate: 'Moderate melanoma signal',
+  high: 'High melanoma signal',
+};
+const scoreFormat = new Intl.NumberFormat('en', { maximumSignificantDigits: 8 });
+
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const dropzone = document.getElementById('dropzone');
 const choose = document.getElementById('choose');
 const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('preview'));
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
+const lesionPath = document.getElementById('lesion-path');
+const maskScanLine = document.getElementById('mask-scan-line');
 const cropControls = document.getElementById('crop-controls');
 const cropZoom = /** @type {HTMLInputElement} */ (document.getElementById('crop-zoom'));
 const cropZoomValue = document.getElementById('crop-zoom-value');
@@ -30,9 +40,15 @@ const analyzeLabel = document.getElementById('analyze-label');
 const analyzeIcon = document.getElementById('analyze-icon');
 const resultIdle = document.getElementById('result-idle');
 const resultLoading = document.getElementById('result-loading');
+const resultProgress = document.getElementById('result-progress');
+const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
+const resultEmpty = document.getElementById('result-empty');
+const resultBand = document.getElementById('result-band');
+const scoreSegments = resultBand.querySelectorAll('[data-score-band]');
 
 let photo;
+let selectedSample;
 let selection = 0;
 let crop;
 let drag;
@@ -44,25 +60,55 @@ function showError(message = '') {
 }
 
 function showResult(state) {
+  const busy = state === 'segmenting' || state === 'classifying';
+  resultLoading.classList.remove('is-fading');
   resultIdle.hidden = state !== 'idle';
-  resultLoading.hidden = state !== 'loading';
+  resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
-  const busy = state === 'loading';
+  resultEmpty.hidden = state !== 'empty';
+  analysisPercent.hidden = state !== 'classifying';
+  if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the crop…';
   analyze.setAttribute('aria-disabled', String(!photo || busy));
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
   analyzeIcon.hidden = busy;
 }
 
+function showPrediction(data) {
+  const bandLabel = melanomaBands[data.melanoma_score_band];
+  document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
+  document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
+  const taskLabel = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
+  document.querySelector('#result-route').textContent = data.analysis_input === 'original_photo' ? `${taskLabel} · original crop used` : taskLabel;
+  resultBand.hidden = !bandLabel;
+  if (bandLabel) {
+    document.querySelector('#result-score').textContent = scoreFormat.format(data.melanoma_score);
+    scoreSegments.forEach((segment) => {
+      segment.classList.toggle('is-active', segment.getAttribute('data-score-band') === data.melanoma_score_band);
+    });
+  }
+  showResult('done');
+}
+
+function clearOutline() {
+  cropFrame.classList.remove('is-segmenting', 'has-outline');
+  lesionPath.removeAttribute('d');
+}
+
 function clearAnalysis() {
   request?.abort();
   request = undefined;
+  clearOutline();
   showError();
   showResult('idle');
 }
 
-function showPhoto(image, filename = '') {
+/** @param {HTMLImageElement} [image] @param {string} [filename] @param {HTMLButtonElement} [sample] */
+function showPhoto(image, filename = '', sample) {
   endDrag();
+  selectedSample?.setAttribute('aria-pressed', 'false');
+  selectedSample = sample;
+  selectedSample?.setAttribute('aria-pressed', 'true');
   photo = image;
   cropFrame.hidden = !image;
   cropControls.hidden = !image;
@@ -217,12 +263,100 @@ document.addEventListener('paste', (event) => {
   setPhoto(image);
 });
 
+async function loadSampleGallery() {
+  let samples;
+  try {
+    const response = await fetch('/api/samples');
+    if (!response.ok) return;
+    samples = await response.json();
+  } catch {
+    return;
+  }
+  if (!samples.length) return;
+
+  const grid = document.getElementById('sample-grid');
+  const credits = document.getElementById('sample-credits');
+  for (const sample of samples) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button sample-photo';
+    button.setAttribute('aria-pressed', 'false');
+
+    const thumbnail = new Image();
+    thumbnail.alt = '';
+    thumbnail.src = sample.url;
+    const caption = document.createElement('span');
+    caption.textContent = sample.title;
+    button.append(thumbnail, caption);
+    button.addEventListener('click', async () => {
+      const current = ++selection;
+      try {
+        await thumbnail.decode();
+        if (current !== selection) return;
+        showPhoto(thumbnail, sample.title, button);
+        if (document.activeElement === button) preview.focus();
+      } catch {
+        if (current === selection) showError('This sample could not be opened. Choose another photo.');
+      }
+    });
+    grid.append(button);
+
+    const credit = document.createElement('li');
+    const source = document.createElement('a');
+    source.href = sample.source;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    source.textContent = sample.title;
+    credit.append(source, ` · ${sample.credit} · ${sample.license} · cropped`);
+    credits.append(credit);
+  }
+  document.getElementById('sample-gallery').hidden = false;
+}
+
+loadSampleGallery();
+
+/** @param {ReadableStream<Uint8Array>} body */
+async function* analysisEvents(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let tail = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      const lines = (tail + decoder.decode(value, { stream: true })).split('\n');
+      tail = lines.pop();
+      for (const line of lines) yield JSON.parse(line);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function finishAnimations(element) {
+  return Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+}
+
+async function revealOutline(path, pending, scanFinished) {
+  await scanFinished;
+  if (request !== pending) return;
+  cropFrame.classList.remove('is-segmenting');
+  if (!path) return;
+  lesionPath.setAttribute('d', path);
+  cropFrame.classList.add('has-outline');
+  await finishAnimations(lesionPath);
+}
+
 analyze.addEventListener('click', async () => {
   if (!photo || request) return;
   const pending = new AbortController();
   request = pending;
   showError();
-  showResult('loading');
+  clearOutline();
+  cropFrame.classList.add('is-segmenting');
+  showResult('segmenting');
+  const scanFinished = finishAnimations(maskScanLine);
+  let countFinished;
 
   try {
     /** @type {Blob | null} */
@@ -231,22 +365,41 @@ analyze.addEventListener('click', async () => {
     if (!croppedPhoto) throw new Error('The crop could not be prepared. Try again.');
     const response = await fetch('/api/predict', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'application/octet-stream', Accept: 'application/x-ndjson' },
       body: croppedPhoto,
       signal: pending.signal,
     });
-    const data = await response.json();
     if (request !== pending) return;
-    if (!response.ok) throw new Error(data.error);
+    if (!response.ok) throw new Error((await response.json()).error);
 
-    document.querySelector('#result-code').textContent = data.research_prediction;
-    document.querySelector('#result-label').textContent = labels[data.research_prediction] ?? data.research_prediction;
-    document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
-    showResult('done');
+    for await (const data of analysisEvents(response.body)) {
+      if (request !== pending) return;
+      if (data.error) throw new Error(data.error);
+      if (typeof data.outline === 'string') {
+        await revealOutline(data.outline, pending, scanFinished);
+        if (request !== pending) return;
+        showResult('classifying');
+        countFinished = finishAnimations(analysisPercent);
+        continue;
+      }
+
+      await countFinished;
+      if (request !== pending) return;
+      resultLoading.classList.add('is-fading');
+      await finishAnimations(resultLoading);
+      if (request !== pending) return;
+      if (data.research_prediction === null) {
+        showResult('empty');
+      } else {
+        showPrediction(data);
+      }
+      return;
+    }
+    throw new Error('Analysis ended early. Try again.');
   } catch (cause) {
     if (request !== pending) return;
+    clearAnalysis();
     showError(cause instanceof TypeError ? 'Could not reach the demo. Check that it is running and try again.' : cause.message);
-    showResult('idle');
   } finally {
     if (request === pending) request = undefined;
   }

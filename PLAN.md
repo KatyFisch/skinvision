@@ -121,15 +121,27 @@ between datasets.
 
 ## 5. Test the phone-photo workflow and build a private demo
 
+- For the two-label MEL-vs-NV demo, use the DermFM-Zero-Open padded-crop head.
+  Use the original crop when the U-Net returns an empty mask, as in the
+  skin-context experiment. Keep the original-photo head as the comparison
+  baseline. Blacking out the background reduced holdout melanoma recall and
+  nevus specificity.
+  [Masked versus original clinical photos](classifiers/README.md#compare-masking-for-mel-vs-nv)
+- Dimming the background while retaining a rim of skin improved specificity
+  at retrospectively matched sensitivity. Its locked cutoff missed the
+  sensitivity target. Retain it as an experiment for further calibration.
+  The padded crop was close to the original-photo baseline.
+  [Context-preserving segmentation comparison](classifiers/README.md#keep-surrounding-skin)
 - The [single-photo pipeline](classifiers/README.md#run-the-single-photo-pipeline)
   uses clinical-only MILK10k models for all three stages. The first holdout
   run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked
   development cutoffs. Improve specificity and evaluate the pipeline
   separately on self-taken photos.
-- Carry forward the melanoma-vs-rest head on frozen PanDerm Base features as
-  the strongest candidate at the sensitivity target. It flagged 87 of 90
-  melanomas and 419 of 958 non-melanomas on the same holdout. Keep the direct
-  11-class head as a candidate for differential diagnosis.
+- Carry forward the direct 11-class head on frozen DermFM-Zero-Open features
+  as the candidate for the private diagnosis demo. It flagged 86 of 90 melanomas
+  and 309 of 958 non-melanomas on the clinic-photo holdout. The binary
+  melanoma-vs-rest head flagged 89 of 90 melanomas and 360 of 958
+  non-melanomas and is the candidate for dedicated melanoma flagging.
   [Clinical classifier comparison](classifiers/README.md#compare-three-single-photo-classifier-designs)
 - Carry forward the clinical MEL-vs-NV model trained on the original
   600 × 450 photos, with five epochs of fine-tuning and a refitted head.

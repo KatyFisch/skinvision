@@ -41,17 +41,39 @@ Clear notebook outputs before committing to keep lesion photos out of Git.
 
 ## Run the local photo demo
 
+Place the U-Net checkpoint at `models/unet_segmentation_full.pth`, or keep the
+extracted checkpoint in `models/unet_segmentation_full/`. Use
+`--segmentation-model` to load it from another location.
+
 ```sh
-uv run --locked python -m demo --model data/experiments/single-photo/20261121T200623773355Z/model.json
+uv run --locked python -m demo --model data/models/padded-crop
 ```
+
+Point `data/models/padded-crop` at a saved
+[skin-context run](classifiers/README.md#keep-surrounding-skin) containing
+`heads.joblib` and `metrics.json`. The demo uses that path by default when it
+exists. Pass the run directory directly with `--model` to try another run.
 
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
-the framing, then select **Analyze photo** to run the classifier on the exact
-600 × 450 crop shown. The demo processes the crop in memory on your computer.
-Replace the model path with `model.json` from your own
-[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
-or put a link to it at `data/models/single-photo/model.json` to omit `--model`.
+the framing, then select **Analyze photo**. The U-Net finds the lesion area in
+the 600 × 450 crop, and the preview traces the detected area. The classifier
+uses the lesion-centered crop with surrounding skin and displays a MEL or NV
+research label. When the mask is empty, it uses the original crop and notes
+that on the result. Processing stays in memory on your computer.
+
+To run the earlier cascade, pass a `model.json` from a
+[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline).
+The cascade uses the black-background input and shows a
+[melanoma score band](classifiers/README.md#melanoma-score-bands) on its
+MEL-vs-NV branch.
+
+To populate **Sample photos**, install the five public-domain or CC0 examples
+with `uv run --locked python -m demo.samples` (requires `curl`). The 600 × 450 JPEGs
+are stored under `data/demo-samples/` and can be used offline after setup. The
+gallery includes the source and license for every photo, including two
+melanoma examples from the National Cancer Institute. If you run the demo
+with `MILK10K_DATA_DIR`, use the same setting when preparing the samples.
 
 ## Attribution
 

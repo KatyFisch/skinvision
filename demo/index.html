@@ -34,7 +34,18 @@
           </div>
           <div class="crop-frame" id="crop-frame" hidden>
             <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
+            <svg class="lesion-outline" viewBox="0 0 600 450" aria-hidden="true">
+              <defs>
+                <linearGradient id="lesion-gradient" x1="0%" y1="28%" x2="100%" y2="72%">
+                  <stop offset="0%"/>
+                  <stop offset="48%"/>
+                  <stop offset="100%"/>
+                </linearGradient>
+              </defs>
+              <path id="lesion-path" pathLength="1" fill="none" stroke="url(#lesion-gradient)" vector-effect="non-scaling-stroke"/>
+            </svg>
             <div class="crop-grid" aria-hidden="true"></div>
+            <div class="mask-scan" aria-hidden="true"><div class="mask-scan-line" id="mask-scan-line"></div></div>
           </div>
         </div>
         <div class="crop-controls" id="crop-controls" hidden>
@@ -58,6 +69,14 @@
         <button type="button" class="button primary" id="analyze" aria-disabled="true" title="Choose a photo first">
           <span id="analyze-label">Analyze photo</span><span aria-hidden="true" id="analyze-icon">↗</span>
         </button>
+        <section class="sample-gallery" id="sample-gallery" aria-labelledby="sample-title" hidden>
+          <h3 id="sample-title">Sample photos</h3>
+          <div class="sample-grid" id="sample-grid"></div>
+          <details class="sample-credits">
+            <summary>Photo credits</summary>
+            <ul id="sample-credits"></ul>
+          </details>
+        </section>
       </section>
 
       <div class="side">
@@ -69,19 +88,35 @@
               <p>Choose a photo and run analysis to see the predicted label and classifier branch.</p>
             </div>
             <div id="result-loading" class="result-placeholder" hidden>
-              <span class="spinner" aria-hidden="true"></span>
-              <p>Analyzing photo…</p>
+              <div class="analysis-activity" aria-hidden="true">
+                <span class="spinner"></span>
+                <span class="analysis-percent" id="analysis-percent" hidden></span>
+              </div>
+              <p id="result-progress">Finding the lesion area…</p>
             </div>
             <div id="result-done" class="result-done" hidden>
               <p class="result-code" id="result-code"></p>
               <p class="result-label" id="result-label"></p>
-              <dl class="result-details"><dt>Classifier branch</dt><dd id="result-route"></dd></dl>
+              <div class="score-band" id="result-band" hidden>
+                <div class="score-band-scale" aria-hidden="true">
+                  <span data-score-band="below"></span>
+                  <span data-score-band="low"></span>
+                  <span data-score-band="moderate"></span>
+                  <span data-score-band="high"></span>
+                </div>
+                <p>Uncalibrated model score <span id="result-score"></span></p>
+              </div>
+              <dl class="result-details"><dt>Classifier</dt><dd id="result-route"></dd></dl>
+            </div>
+            <div id="result-empty" class="result-done" hidden>
+              <p class="result-label">No lesion area found</p>
+              <p class="result-empty-help">Adjust the crop so it includes the whole lesion and try again.</p>
             </div>
           </div>
         </section>
         <aside class="research-note" aria-labelledby="research-title">
           <h2 id="research-title">Research use only</h2>
-          <p>Use curated examples. This model was evaluated on clinic photos and produced many false melanoma flags. Use a clinician’s assessment for personal skin concerns.</p>
+          <p>Use curated examples. The classifier often labeled nevi as melanoma in clinic-photo testing. Use a clinician’s assessment for personal skin concerns.</p>
         </aside>
       </div>
     </div>
