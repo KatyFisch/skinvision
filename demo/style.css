@@ -21,7 +21,7 @@
 body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 var(--sans); }
 ::selection { background: #ccdccb; color: var(--ink); }
 button { font: inherit; }
-button:focus-visible, input:focus-visible { outline: 2px solid #749480; outline-offset: 0; }
+button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid #749480; outline-offset: 0; }
 h1, h2, p, ul, dl, dd { margin: 0; }
 
 .masthead { border-bottom: 1px solid var(--line); }
@@ -86,8 +86,21 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .primary { width: 100%; justify-content: center; gap: 9px; display: flex; align-items: center; margin-top: 15px; background: var(--green); color: white; }
 .primary[aria-disabled="true"] { color: #45534a; background: #e2e8df; cursor: default; }
 .error { color: var(--error); margin-top: 12px; }
+.sample-gallery { margin-top: 19px; padding-top: 14px; border-top: 1px solid var(--line); }
+.sample-gallery h3 { margin: 0 0 9px; color: var(--ink); font-size: 14px; font-weight: 600; }
+.sample-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 92px), 1fr)); gap: 8px; }
+.sample-photo { display: grid; align-content: start; gap: 5px; padding: 3px 3px 5px; border-color: var(--line); background: var(--paper); text-align: left; font-size: 12px; line-height: 1.25; }
+.sample-photo[aria-pressed="true"] { border-color: var(--green); background: var(--wash); }
+.sample-photo img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; background: var(--wash); }
+.sample-photo span { padding-inline: 3px; }
+.sample-credits { margin-top: 6px; color: var(--muted); font-size: 12px; }
+.sample-credits summary { width: fit-content; padding: 4px 0; cursor: pointer; }
+.sample-credits ul { margin-top: 3px; padding-left: 17px; }
+.sample-credits a { color: var(--green); }
 @media (hover: hover) and (pointer: fine) {
   .secondary:hover, .quiet:hover { background: #e3eadf; }
+  .sample-photo:hover { border-color: #a9b4a5; }
+  .sample-photo[aria-pressed="true"]:hover { border-color: var(--green); }
   .primary:not([aria-disabled="true"]):hover { background: var(--green-dark); }
 }
 

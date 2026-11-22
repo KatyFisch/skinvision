@@ -61,6 +61,13 @@ Replace the model path with `model.json` from your own
 [single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
 or put a link to it at `data/models/single-photo/model.json` to omit `--model`.
 
+To populate **Sample photos**, install the five public-domain or CC0 examples
+with `uv run --locked python -m demo.samples` (requires `curl`). The 600 × 450 JPEGs
+are stored under `data/demo-samples/` and can be used offline after setup. The
+gallery includes the source and license for every photo, including two
+melanoma examples from the National Cancer Institute. If you run the demo
+with `MILK10K_DATA_DIR`, use the same setting when preparing the samples.
+
 ## Attribution
 
 MILK study team. MILK10k. ISIC Archive, 2025, doi:10.34970/648456.

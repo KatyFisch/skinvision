@@ -15,6 +15,7 @@ import torch
 from PIL import Image, ImageOps
 
 from classifiers.single_photo import PhotoClassifier
+from demo.samples import SAMPLE_ASSETS, SAMPLE_FOLDER, available_samples
 from demo.segmentation import LesionSegmenter, outline_path, overlay_png
 
 ROOT = Path(__file__).resolve().parent
@@ -28,10 +29,19 @@ ASSETS = {
 
 
 class DemoHandler(BaseHTTPRequestHandler):
-    def __init__(self, *args, classifier: PhotoClassifier, segmenter: LesionSegmenter, inference_lock: LockType, **kwargs) -> None:
+    def __init__(
+        self,
+        *args,
+        classifier: PhotoClassifier,
+        segmenter: LesionSegmenter,
+        inference_lock: LockType,
+        samples_dir: Path = ROOT.parent / "data" / SAMPLE_FOLDER,
+        **kwargs,
+    ) -> None:
         self.classifier = classifier
         self.segmenter = segmenter
         self.inference_lock = inference_lock
+        self.samples_dir = samples_dir
         super().__init__(*args, **kwargs)
 
     def start_reply(self, status: HTTPStatus, content_type: str, length: int | None = None) -> None:
@@ -85,12 +95,27 @@ class DemoHandler(BaseHTTPRequestHandler):
                 self.reply_json(HTTPStatus.INTERNAL_SERVER_ERROR, message)
 
     def do_GET(self) -> None:
-        asset = ASSETS.get(self.path)
-        if asset is None:
-            self.send_error(HTTPStatus.NOT_FOUND)
+        if self.path == "/api/samples":
+            catalog = json.dumps(available_samples(self.samples_dir)).encode()
+            self.reply(HTTPStatus.OK, "application/json", catalog)
             return
-        filename, content_type = asset
-        self.reply(HTTPStatus.OK, content_type, (ROOT / filename).read_bytes())
+
+        asset = ASSETS.get(self.path)
+        if asset is not None:
+            filename, content_type = asset
+            self.reply(HTTPStatus.OK, content_type, (ROOT / filename).read_bytes())
+            return
+
+        sample = SAMPLE_ASSETS.get(self.path)
+        if sample is not None:
+            try:
+                photo = (self.samples_dir / sample.filename).read_bytes()
+            except FileNotFoundError:
+                pass
+            else:
+                self.reply(HTTPStatus.OK, "image/jpeg", photo)
+                return
+        self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:
         if self.path != "/api/predict":
@@ -145,7 +170,7 @@ def main() -> None:
     torch.set_num_threads(min(4, torch.get_num_threads()))
     classifier = PhotoClassifier(args.model, device)
     segmenter = LesionSegmenter(checkpoint, device)
-    handler = partial(DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock())
+    handler = partial(DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), samples_dir=data_dir / SAMPLE_FOLDER)
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
         print(f"SkinVision is running at http://127.0.0.1:{server.server_port}", flush=True)
         try:

@@ -38,6 +38,7 @@ const resultDone = document.getElementById('result-done');
 const resultEmpty = document.getElementById('result-empty');
 
 let photo;
+let selectedSample;
 let selection = 0;
 let crop;
 let drag;
@@ -76,8 +77,12 @@ function clearAnalysis() {
   showResult('idle');
 }
 
-function showPhoto(image, filename = '') {
+/** @param {HTMLImageElement} [image] @param {string} [filename] @param {HTMLButtonElement} [sample] */
+function showPhoto(image, filename = '', sample) {
   endDrag();
+  selectedSample?.setAttribute('aria-pressed', 'false');
+  selectedSample = sample;
+  selectedSample?.setAttribute('aria-pressed', 'true');
   photo = image;
   cropFrame.hidden = !image;
   cropControls.hidden = !image;
@@ -231,6 +236,58 @@ document.addEventListener('paste', (event) => {
   event.preventDefault();
   setPhoto(image);
 });
+
+async function loadSampleGallery() {
+  let samples;
+  try {
+    const response = await fetch('/api/samples');
+    if (!response.ok) return;
+    samples = await response.json();
+  } catch {
+    return;
+  }
+  if (!samples.length) return;
+
+  const grid = document.getElementById('sample-grid');
+  const credits = document.getElementById('sample-credits');
+  for (const sample of samples) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button sample-photo';
+    button.setAttribute('aria-pressed', 'false');
+
+    const thumbnail = new Image();
+    thumbnail.alt = '';
+    thumbnail.src = sample.url;
+    const caption = document.createElement('span');
+    caption.textContent = sample.title;
+    button.append(thumbnail, caption);
+    button.addEventListener('click', async () => {
+      const current = ++selection;
+      try {
+        await thumbnail.decode();
+        if (current !== selection) return;
+        showPhoto(thumbnail, sample.title, button);
+        if (document.activeElement === button) preview.focus();
+      } catch {
+        if (current === selection) showError('This sample could not be opened. Choose another photo.');
+      }
+    });
+    grid.append(button);
+
+    const credit = document.createElement('li');
+    const source = document.createElement('a');
+    source.href = sample.source;
+    source.target = '_blank';
+    source.rel = 'noopener noreferrer';
+    source.textContent = sample.title;
+    credit.append(source, ` · ${sample.credit} · ${sample.license} · cropped`);
+    credits.append(credit);
+  }
+  document.getElementById('sample-gallery').hidden = false;
+}
+
+loadSampleGallery();
 
 /** @param {ReadableStream<Uint8Array>} body */
 async function* analysisEvents(body) {
