@@ -83,13 +83,13 @@ Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
 the 600 × 450 crop, and the preview traces the detected area. The classifier
-uses the lesion-centered crop with surrounding skin and displays **low**,
-**inconclusive**, or **high risk** based on its research score. The pulsing
-Grad-CAM overlay highlights stronger positive contributions to the returned
-class inside the original U-Net outline. It shows normalized heat above 0.30
-and reaches at most 75% opacity. When the mask
-is empty, the classifier uses the original crop and the demo displays an
-inconclusive result with instructions to adjust the crop.
+uses the lesion-centered crop with surrounding skin. When it returns MEL,
+the card shows **Possible melanoma**, **Moderate melanoma signal**, or
+**Strong melanoma signal** according to the model's score band. Other
+predicted diagnoses appear as possible matches. The pulsing Grad-CAM overlay
+highlights stronger positive contributions inside the original U-Net outline.
+It shows normalized heat above 0.30 and reaches at most 75% opacity. When the
+mask is empty, the demo prompts the user to adjust the crop.
 Processing stays in memory on your computer.
 
 ### Use different checkpoints
@@ -109,10 +109,10 @@ extracted folder. Pass `--segmentation-model` for another location and
 `--mel-nv-only` to run just the padded-crop classifier.
 
 The router scores the full frame at its saved cutoff. The MEL/NV branch uses
-the padded crop and reports the binary model's suggestion and melanoma signal.
+the padded crop and reports the predicted diagnosis and melanoma signal.
 The other branch scores the full frame and shows the leading diagnosis among
-the nine other classes. A missing lesion mask still gives an inconclusive
-result. The combined pipeline has not been evaluated as a clinical tool.
+the nine other classes. The combined pipeline has not been evaluated as a
+clinical tool.
 
 To run the saved legacy cascade, pass its `model.json` with `--model`. Keep the
 checkpoints referenced by that file at their saved relative paths. The cascade

@@ -1,38 +1,21 @@
-const melanomaOutcomes = {
-  below: 'low',
-  low: 'inconclusive',
-  moderate: 'inconclusive',
-  high: 'high',
+const melanomaHeadlines = {
+  low: 'Possible melanoma',
+  moderate: 'Moderate melanoma signal',
+  high: 'Strong melanoma signal',
 };
 
-const outcomes = {
-  high: {
-    title: 'high risk',
-    description:
-      'The research model found a strong melanoma signal. Some moles can look similar. Only a biopsy can give conclusive results.',
-  },
-  inconclusive: {
-    title: 'inconclusive',
-    description: 'The research model found some melanoma signal, but the result was unclear. Only a biopsy can give conclusive results.',
-  },
-  low: {
-    title: 'low',
-    description: 'The research model found little evidence of melanoma in this photo. Only a biopsy can give conclusive results.',
-  },
-};
-
+const biopsyNote = 'Only a biopsy can give conclusive results.';
 const diagnoses = {
-  MEL: 'Melanoma',
-  NV: 'Melanocytic nevus (mole)',
-  AKIEC: 'Actinic keratosis or intraepidermal carcinoma',
-  BCC: 'Basal cell carcinoma',
-  BEN_OTH: 'Other benign growth',
-  BKL: 'Benign keratinocytic lesion',
-  DF: 'Dermatofibroma',
-  INF: 'Inflammatory or infectious condition',
-  MAL_OTH: 'Other malignant growth',
-  SCCKA: 'Squamous cell carcinoma or keratoacanthoma',
-  VASC: 'Vascular lesion or bleeding',
+  NV: 'melanocytic nevus (mole)',
+  AKIEC: 'actinic keratosis or intraepidermal carcinoma',
+  BCC: 'basal cell carcinoma',
+  BEN_OTH: 'other benign growth',
+  BKL: 'benign keratinocytic lesion',
+  DF: 'dermatofibroma',
+  INF: 'inflammatory or infectious condition',
+  MAL_OTH: 'other malignant growth',
+  SCCKA: 'squamous cell carcinoma or keratoacanthoma',
+  VASC: 'vascular lesion or bleeding',
 };
 
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
@@ -60,7 +43,6 @@ const resultLoading = document.getElementById('result-loading');
 const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultLabel = document.getElementById('result-label');
-const resultSuggestion = document.getElementById('result-suggestion');
 const resultDescription = document.getElementById('result-description');
 
 let photo;
@@ -89,6 +71,23 @@ function showResult(state) {
   analyzeIcon.hidden = busy;
 }
 
+function predictionCopy(data) {
+  if (data.analysis_input === 'original_photo' || data.research_prediction === null) {
+    return { title: 'Lesion not detected', description: 'Frame the whole lesion and try again.' };
+  }
+
+  const diagnosis = data.research_prediction;
+  if (diagnosis === 'MEL') {
+    const band = data.melanoma_score_band;
+    const signal = band === 'high' || band === 'moderate' ? band : 'low';
+    return { title: melanomaHeadlines[signal], description: `Some moles can look similar. ${biopsyNote}`, signal };
+  }
+  if (Object.hasOwn(diagnoses, diagnosis)) {
+    return { title: `Possible ${diagnoses[diagnosis]}`, description: diagnosis === 'NV' ? biopsyNote : '' };
+  }
+  return { title: 'Result unavailable', description: 'Try analyzing the photo again.' };
+}
+
 function showPrediction(data) {
   if (data.heatmap) {
     const png = Uint8Array.from(atob(data.heatmap), (character) => character.charCodeAt(0));
@@ -101,26 +100,11 @@ function showPrediction(data) {
     heatmapNote.textContent = 'No strong Grad-CAM activations inside the lesion outline';
     heatmapNote.hidden = false;
   }
-  const missingLesion = data.analysis_input === 'original_photo' || data.research_prediction === null;
-  const diagnosis = missingLesion ? undefined : diagnoses[data.research_prediction];
-  const otherDiagnosis = data.route === 'OTHER' ? diagnosis : undefined;
-  const scoredOutcome = melanomaOutcomes[data.melanoma_score_band];
-  const outcome = missingLesion ? 'inconclusive' : (scoredOutcome ?? 'inconclusive');
-  const { title, description } = outcomes[outcome];
-  let explanation = description;
-  if (missingLesion) {
-    explanation = 'The model could not find a lesion in this crop. Adjust the framing to include the whole lesion and try again.';
-  } else if (otherDiagnosis) {
-    explanation = 'The research model suggested this diagnosis from the photo.';
-  } else if (!scoredOutcome) {
-    explanation = 'The model did not return a melanoma score for this crop.';
-  }
-  const specialistSuggestion = data.route === 'MEL_OR_NV' && diagnosis;
-  resultSuggestion.textContent = specialistSuggestion ? `Model suggestion: ${specialistSuggestion}. ` : '';
-  resultSuggestion.hidden = !specialistSuggestion;
-  resultDone.dataset.outcome = otherDiagnosis ? 'other' : outcome;
-  resultLabel.textContent = otherDiagnosis ?? title;
-  resultDescription.textContent = explanation;
+  const { title, description, signal } = predictionCopy(data);
+  resultDone.dataset.signal = signal ?? '';
+  resultLabel.textContent = title;
+  resultDescription.textContent = description;
+  resultDescription.hidden = !description;
   showResult('done');
 }
 
