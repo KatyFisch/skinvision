@@ -5,15 +5,17 @@ import hashlib
 import json
 import math
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+import cv2
 import joblib
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 from sklearn.metrics import roc_auc_score
 from sklearn.pipeline import Pipeline
 from threadpoolctl import threadpool_limits
@@ -27,28 +29,68 @@ from classifiers.single_photo import PIPELINE_TARGET, rate
 from classifiers.train_mel_nv import fit_frozen_head
 from demo.segmentation import SEGMENTATION_SIZE, LesionSegmenter
 
+PHOTO_SIZE = (600, 450)
+SKIN_MARGIN_PX = 12
+BACKGROUND_BRIGHTNESS = 0.5
+CROP_MARGIN_FRACTION = 0.25
+PhotoTransform = Callable[[Image.Image, Image.Image], Image.Image]
 
-def mask_clinical_photos(rows: pd.DataFrame, data_dir: Path, output: Path, segmenter: LesionSegmenter) -> tuple[pd.DataFrame, pd.Series]:
-    directory = output / "masked_photos"
-    directory.mkdir()
+
+def black_background(photo: Image.Image, mask: Image.Image) -> Image.Image:
+    return Image.composite(photo, Image.new("RGB", photo.size), mask)
+
+
+def dim_background(photo: Image.Image, mask: Image.Image) -> Image.Image:
+    diameter = 2 * SKIN_MARGIN_PX + 1
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (diameter, diameter))
+    expanded = Image.fromarray(cv2.dilate(np.asarray(mask), kernel))
+    dimmed = ImageEnhance.Brightness(photo).enhance(BACKGROUND_BRIGHTNESS)
+    return Image.composite(photo, dimmed, expanded)
+
+
+def crop_with_skin_margin(photo: Image.Image, mask: Image.Image) -> Image.Image:
+    bounds = mask.getbbox()
+    if bounds is None:
+        return photo
+    left, top, right, bottom = bounds
+    margin = max(SKIN_MARGIN_PX, round(max(right - left, bottom - top) * CROP_MARGIN_FRACTION))
+    left, top = max(0, left - margin), max(0, top - margin)
+    right, bottom = min(photo.width, right + margin), min(photo.height, bottom + margin)
+
+    # Enlarge the padded box to 4:3 and shift it inside the frame before resizing.
+    units = math.ceil(max((right - left) / 4, (bottom - top) / 3))
+    width, height = 4 * units, 3 * units
+    x = min(max(0, (left + right - width) // 2), photo.width - width)
+    y = min(max(0, (top + bottom - height) // 2), photo.height - height)
+    return photo.crop((x, y, x + width, y + height)).resize(PHOTO_SIZE, Image.Resampling.LANCZOS)
+
+
+def prepare_variant_photos(
+    rows: pd.DataFrame, data_dir: Path, output: Path, segmenter: LesionSegmenter, variants: dict[str, PhotoTransform]
+) -> tuple[dict[str, pd.DataFrame], pd.Series]:
+    directories = {name: output / f"{name}_photos" for name in variants}
+    for directory in directories.values():
+        directory.mkdir()
+
     foreground = {}
-    paths = {}
+    paths: dict[str, dict[str, str]] = {name: {} for name in variants}
     for count, (lesion_id, clinical_path) in enumerate(rows["clinical_path"].items(), 1):
         with Image.open(data_dir / clinical_path) as source:
             photo = ImageOps.exif_transpose(source).convert("RGB")
-        if photo.size != (600, 450):
+        if photo.size != PHOTO_SIZE:
             raise ValueError(f"Expected a 600 × 450 clinical photo for {lesion_id}, got {photo.size}")
         mask = segmenter.mask(photo)
         foreground[lesion_id] = float(np.asarray(mask).mean() / 255)
         if mask.getbbox() is not None:
-            path = directory / f"{lesion_id}.png"
-            Image.composite(photo, Image.new("RGB", photo.size), mask).save(path, compress_level=1)
-            paths[lesion_id] = str(path.relative_to(data_dir))
+            for name, transform in variants.items():
+                path = directories[name] / f"{lesion_id}.png"
+                transform(photo, mask).save(path, compress_level=1)
+                paths[name][str(lesion_id)] = str(path.relative_to(data_dir))
         if count == 1 or count % 120 == 0 or count == len(rows):
             print(f"Segmented {count}/{len(rows)} photos", flush=True)
     coverage = pd.Series(foreground, name="mask_foreground_fraction").reindex(rows.index)
-    masked = rows.loc[coverage.gt(0)].assign(clinical_path=pd.Series(paths))
-    return masked, coverage
+    usable = rows.loc[coverage.gt(0)]
+    return {name: usable.assign(clinical_path=pd.Series(variant_paths)) for name, variant_paths in paths.items()}, coverage
 
 
 def score_ensemble(features: pd.DataFrame, target: pd.Series, training: list[pd.Series]) -> tuple[list[Pipeline], pd.Series]:
@@ -85,16 +127,23 @@ def summarize(melanoma: np.ndarray, scores: np.ndarray, cutoff: float) -> dict:
 
 
 def compare_heads(
-    rows: pd.DataFrame, features: dict[str, pd.DataFrame], calibration: pd.Series, coverage: pd.Series
+    rows: pd.DataFrame,
+    features: dict[str, pd.DataFrame],
+    calibration: pd.Series,
+    coverage: pd.Series,
+    *,
+    fallback_to_original: bool = False,
 ) -> tuple[dict, pd.DataFrame, dict[str, list[Pipeline]]]:
     holdout = rows["split"].eq("test")
     target = cast(pd.Series, rows["diagnosis_code"].eq("MEL"))
     usable = coverage.gt(0)
-    eligible = ~holdout & ~calibration & usable
+    eligible = ~holdout & ~calibration
+    if not fallback_to_original:
+        eligible &= usable
     folds = (1, 2, 3)
     training = [cast(pd.Series, eligible & rows["validation_fold"].ne(fold).fillna(False)) for fold in folds]
     if any(target[selected].nunique() != 2 for selected in training):
-        raise ValueError("Every training fold needs melanomas and nevi with usable segmentation masks")
+        raise ValueError("Every training fold needs both melanomas and nevi")
     metrics: dict = {
         "training_rows_per_member": {fold: int(selected.to_numpy().sum()) for fold, selected in zip(folds, training, strict=True)},
         "methods": {},
@@ -136,32 +185,41 @@ def evaluate(args: argparse.Namespace, device: torch.device) -> None:
     rows = parent.loc[parent["diagnosis_code"].isin(["MEL", "NV"])]
     calibration = calibration_mask(parent).loc[rows.index]
     holdout = rows["split"].eq("test")
+    use_context = args.comparison == "skin-context"
+    variants = {"dimmed_background": dim_background, "padded_crop": crop_with_skin_margin} if use_context else {"masked": black_background}
 
     run = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    output = data_dir / "experiments" / "masked-mel-nv" / run
+    run_folder = f"{run}-skin-context" if use_context else run
+    output = data_dir / "experiments" / "masked-mel-nv" / run_folder
     output.mkdir(parents=True)
     with checkpoint.open("rb") as weights:
         segmentation_sha256 = hashlib.file_digest(weights, "sha256").hexdigest()
     print(f"Run: {output}", flush=True)
     segmenter = LesionSegmenter(checkpoint, device)
-    masked_rows, coverage = mask_clinical_photos(rows, data_dir, output, segmenter)
+    transformed, coverage = prepare_variant_photos(rows, data_dir, output, segmenter, variants)
     del segmenter
     usable = coverage.gt(0)
     coverage.to_csv(output / "mask_coverage.csv")
     print(f"Empty masks: {int((~usable).sum())}/{len(usable)} lesions", flush=True)
-    if masked_rows.empty:
+    if not usable.any():
         raise ValueError("The U-Net produced no usable masks for this comparison")
 
     # The full-catalog call can reuse the embeddings from the original clinical comparison.
     unmasked, provenance, reused = dermfm_zero.encode_clinical(parent, data_dir, device, args.batch_size)
-    masked, _, _ = dermfm_zero.encode_clinical(masked_rows, data_dir, device, args.batch_size)
-    if not (np.isfinite(unmasked).all() and np.isfinite(masked).all()):
-        raise ValueError("DermFM-Zero-Open produced non-finite embeddings")
-    features = {
-        "unmasked": pd.DataFrame(unmasked, index=parent.index).loc[rows.index],
-        "masked": pd.DataFrame(masked, index=masked_rows.index).reindex(rows.index),
-    }
-    comparison, predictions, heads = compare_heads(rows, features, calibration, coverage)
+    original_features = pd.DataFrame(unmasked, index=parent.index).loc[rows.index]
+    features = {"unmasked": original_features}
+    for method, inputs in transformed.items():
+        print(f"Encoding {method}", flush=True)
+        embeddings, _, _ = dermfm_zero.encode_clinical(inputs, data_dir, device, args.batch_size)
+        if not np.isfinite(embeddings).all():
+            raise ValueError(f"DermFM-Zero-Open produced non-finite {method} embeddings")
+        matrix = pd.DataFrame(embeddings, index=inputs.index).reindex(rows.index)
+        if use_context:
+            matrix.loc[~usable] = original_features.loc[~usable]
+        features[method] = matrix
+    if not np.isfinite(unmasked).all():
+        raise ValueError("DermFM-Zero-Open produced non-finite unmasked embeddings")
+    comparison, predictions, heads = compare_heads(rows, features, calibration, coverage, fallback_to_original=use_context)
     metrics = {
         "catalog_sha256": catalog.sha256,
         "manifest_sha256": hashlib.sha256((data_dir / "splits" / FULL_MANIFEST_NAME).read_bytes()).hexdigest(),
@@ -170,12 +228,23 @@ def evaluate(args: argparse.Namespace, device: torch.device) -> None:
         "segmentation_checkpoint": str(checkpoint),
         "segmentation_checkpoint_sha256": segmentation_sha256,
         "segmentation_input_size": SEGMENTATION_SIZE,
+        "comparison": args.comparison,
+        "empty_mask_policy": "original_photo" if use_context else "inconclusive",
+        "empty_masks": {
+            split: int(np.count_nonzero(~usable & selected))
+            for split, selected in (("training", ~calibration & ~holdout), ("calibration", calibration), ("holdout", holdout))
+        },
         "calibration_seed": CALIBRATION_SEED,
         "calibration_fraction": CALIBRATION_FRACTION,
         "melanoma_sensitivity_target": PIPELINE_TARGET,
         "pretraining_isic_id_overlap": dermfm_zero.pretraining_id_overlap(rows, data_dir),
         **comparison,
     }
+    if use_context:
+        metrics["context_transforms"] = {
+            "dimmed_background": {"skin_margin_px": SKIN_MARGIN_PX, "outside_brightness": BACKGROUND_BRIGHTNESS},
+            "padded_crop": {"margin_fraction_of_longest_side": CROP_MARGIN_FRACTION, "minimum_margin_px": SKIN_MARGIN_PX},
+        }
 
     predictions.loc[calibration].to_csv(output / "calibration_predictions.csv")
     predictions.loc[holdout].to_csv(output / "holdout_predictions.csv")
@@ -190,6 +259,7 @@ def main() -> None:
     parser.add_argument("--data-dir", type=Path, default=default_data_dir)
     parser.add_argument("--catalog", type=Path, default=Path("final_data.csv"))
     parser.add_argument("--segmentation-model", type=Path, required=True, help="Path to the demo's U-Net .pth file")
+    parser.add_argument("--comparison", choices=["black-background", "skin-context"], default="black-background")
     parser.add_argument("--batch-size", type=int, default=12)
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     args = parser.parse_args()

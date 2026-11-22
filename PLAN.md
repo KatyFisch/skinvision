@@ -126,6 +126,11 @@ between datasets.
   holdout melanoma recall and nevus specificity, with seven empty masks among
   90 holdout melanomas. Keep segmentation available as a visible overlay.
   [Masked versus original clinical photos](classifiers/README.md#compare-masking-for-mel-vs-nv)
+- Dimming the background while retaining a rim of skin improved specificity
+  at retrospectively matched sensitivity. Its locked cutoff missed the
+  sensitivity target. Retain it as an experiment for further calibration.
+  The padded crop was close to the original-photo baseline.
+  [Context-preserving segmentation comparison](classifiers/README.md#keep-surrounding-skin)
 - The [single-photo pipeline](classifiers/README.md#run-the-single-photo-pipeline)
   uses clinical-only MILK10k models for all three stages. The first holdout
   run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked

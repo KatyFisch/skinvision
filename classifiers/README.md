@@ -200,6 +200,46 @@ Runs save the metrics, heads, mask coverage, masked photos, and predictions
 under `data/experiments/masked-mel-nv/`. The original DermFM-Zero-Open feature
 cache can be reused.
 
+### Keep surrounding skin
+
+```sh
+uv run --locked python -m classifiers.compare_masked_mel_nv --comparison skin-context --segmentation-model models/unet_segmentation_full.pth
+```
+
+This comparison uses the same U-Net and frozen MEL/NV split. It fits a
+separate DermFM-Zero-Open head ensemble for each input:
+
+- **Original.** The original 600 × 450 clinical photo.
+- **Dimmed background.** The full frame with the predicted lesion and 12 pixels
+  of surrounding skin retained at their original brightness. The rest of the
+  photo is dimmed to 50% brightness.
+- **Padded crop.** Pad the mask's bounding box on each side by 25% of its
+  longest side, with a 12-pixel minimum. Fit a 4:3 crop inside the original
+  frame and resize proportionally to 600 × 450.
+
+Both segmentation variants fall back to the original photo when the mask is
+empty, during training, calibration, and testing. All three ensembles train
+on the same eligible lesions, including those with empty masks. Choose a
+melanoma cutoff separately for each method using the 189 calibration lesions.
+The metrics include results on the 239-lesion holdout and on its shared
+nonempty-mask subset. Runs are saved alongside the black-background comparison
+with a `-skin-context` suffix.
+
+| Input | Holdout melanomas flagged | Holdout nevi correctly labeled NV | NV correct at matched 86/90 MEL |
+| --- | ---: | ---: | ---: |
+| Original | 86/90 | 22/149 | 28/149 |
+| Dimmed background | 81/90 | 43/149 | 35/149 |
+| Padded crop | 87/90 | 21/149 | 26/149 |
+
+The locked cutoffs use development data. The last column uses holdout labels
+to match melanoma sensitivity retrospectively. On the shared subset with
+nonempty masks, at 79 of 83 melanomas flagged, the original, dimmed, and padded
+crop variants correctly classified 25, 32, and 25 of 135 nevi, respectively.
+Both segmentation variants used the original image for the same 21 empty
+masks on the holdout, including seven melanomas. Dimming is worth carrying
+forward for further calibration at high sensitivity. Its locked cutoff fell
+below the 95% target, so keep the original clinical crop as the reference.
+
 ## Compare three single-photo classifier designs
 
 ```sh
