@@ -3,7 +3,8 @@ from unittest import TestCase
 import numpy as np
 from PIL import Image
 
-from classifiers.compare_masked_mel_nv import crop_with_skin_margin, cutoff_at_target, dim_background, summarize
+from classifiers.compare_masked_mel_nv import cutoff_at_target, dim_background, summarize
+from classifiers.lesion_crop import crop_with_skin_margin
 
 
 class MaskedMelNvComparisonTest(TestCase):

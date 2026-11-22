@@ -102,11 +102,28 @@ def build_encoder(checkpoint: Path, device: torch.device, dtype: torch.dtype) ->
     return encoder.eval().requires_grad_(False).to(device=device, dtype=dtype)
 
 
-def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int) -> tuple[np.ndarray, dict[str, str], bool]:
-    preprocess = transforms.Compose(
+def clinical_preprocess() -> transforms.Compose:
+    return transforms.Compose(
         [transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float32), transforms.Normalize((0.5,) * 3, (0.5,) * 3)]
     )
-    dtype = torch.float16 if device.type == "mps" else torch.float32
+
+
+def clinical_dtype(device: torch.device) -> torch.dtype:
+    return torch.float16 if device.type == "mps" else torch.float32
+
+
+def load_clinical_encoder(data_dir: Path, device: torch.device) -> DermFMVisionTransformer:
+    checkpoint = download(WEIGHTS_FILENAME, data_dir)
+    with checkpoint.open("rb") as weights:
+        digest = hashlib.file_digest(weights, "sha256").hexdigest()
+    if digest != WEIGHTS_SHA256:
+        raise ValueError(f"DermFM-Zero-Open checkpoint checksum mismatch for {checkpoint}")
+    return build_encoder(checkpoint, device, clinical_dtype(device))
+
+
+def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int) -> tuple[np.ndarray, dict[str, str], bool]:
+    preprocess = clinical_preprocess()
+    dtype = clinical_dtype(device)
     settings = {
         "checkpoint": f"{REPOSITORY}@{REVISION}/{WEIGHTS_FILENAME}",
         "source": SOURCE,
@@ -123,12 +140,15 @@ def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, ba
         "image_columns": "clinical_path",
     }
 
-    def load_encoder() -> DermFMVisionTransformer:
-        checkpoint = download(WEIGHTS_FILENAME, data_dir)
-        with checkpoint.open("rb") as weights:
-            digest = hashlib.file_digest(weights, "sha256").hexdigest()
-        if digest != WEIGHTS_SHA256:
-            raise ValueError(f"DermFM-Zero-Open checkpoint checksum mismatch for {checkpoint}")
-        return build_encoder(checkpoint, device, dtype)
-
-    return cached_embeddings(NAME, rows, data_dir, device, batch_size, ["clinical_path"], preprocess, load_encoder, settings, dtype=dtype)
+    return cached_embeddings(
+        NAME,
+        rows,
+        data_dir,
+        device,
+        batch_size,
+        ["clinical_path"],
+        preprocess,
+        lambda: load_clinical_encoder(data_dir, device),
+        settings,
+        dtype=dtype,
+    )

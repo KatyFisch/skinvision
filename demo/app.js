@@ -67,7 +67,7 @@ function showResult(state) {
   resultDone.hidden = state !== 'done';
   resultEmpty.hidden = state !== 'empty';
   analysisPercent.hidden = state !== 'classifying';
-  if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the masked crop…';
+  if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the crop…';
   analyze.setAttribute('aria-disabled', String(!photo || busy));
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
@@ -78,7 +78,8 @@ function showPrediction(data) {
   const bandLabel = melanomaBands[data.melanoma_score_band];
   document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
   document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
-  document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
+  const taskLabel = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
+  document.querySelector('#result-route').textContent = data.analysis_input === 'original_photo' ? `${taskLabel} · original crop used` : taskLabel;
   resultBand.hidden = !bandLabel;
   if (bandLabel) {
     document.querySelector('#result-score').textContent = scoreFormat.format(data.melanoma_score);

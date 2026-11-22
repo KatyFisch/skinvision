@@ -25,14 +25,12 @@ from classifiers.catalog import load_catalog
 from classifiers.compare_clinical import CALIBRATION_FRACTION, CALIBRATION_SEED, calibration_mask
 from classifiers.eval_split.create_splits import FULL_MANIFEST_NAME
 from classifiers.eval_split.prepare_routed_tasks import prepare_routed_tasks
+from classifiers.lesion_crop import CROP_MARGIN_FRACTION, PHOTO_SIZE, SKIN_MARGIN_PX, crop_with_skin_margin
 from classifiers.single_photo import PIPELINE_TARGET, rate
 from classifiers.train_mel_nv import fit_frozen_head
 from demo.segmentation import SEGMENTATION_SIZE, LesionSegmenter
 
-PHOTO_SIZE = (600, 450)
-SKIN_MARGIN_PX = 12
 BACKGROUND_BRIGHTNESS = 0.5
-CROP_MARGIN_FRACTION = 0.25
 PhotoTransform = Callable[[Image.Image, Image.Image], Image.Image]
 
 
@@ -46,23 +44,6 @@ def dim_background(photo: Image.Image, mask: Image.Image) -> Image.Image:
     expanded = Image.fromarray(cv2.dilate(np.asarray(mask), kernel))
     dimmed = ImageEnhance.Brightness(photo).enhance(BACKGROUND_BRIGHTNESS)
     return Image.composite(photo, dimmed, expanded)
-
-
-def crop_with_skin_margin(photo: Image.Image, mask: Image.Image) -> Image.Image:
-    bounds = mask.getbbox()
-    if bounds is None:
-        return photo
-    left, top, right, bottom = bounds
-    margin = max(SKIN_MARGIN_PX, round(max(right - left, bottom - top) * CROP_MARGIN_FRACTION))
-    left, top = max(0, left - margin), max(0, top - margin)
-    right, bottom = min(photo.width, right + margin), min(photo.height, bottom + margin)
-
-    # Enlarge the padded box to 4:3 and shift it inside the frame before resizing.
-    units = math.ceil(max((right - left) / 4, (bottom - top) / 3))
-    width, height = 4 * units, 3 * units
-    x = min(max(0, (left + right - width) // 2), photo.width - width)
-    y = min(max(0, (top + bottom - height) // 2), photo.height - height)
-    return photo.crop((x, y, x + width, y + height)).resize(PHOTO_SIZE, Image.Resampling.LANCZOS)
 
 
 def prepare_variant_photos(

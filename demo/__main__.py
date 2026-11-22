@@ -14,6 +14,8 @@ from threading import Lock
 import torch
 from PIL import Image, ImageOps
 
+from classifiers.lesion_crop import PHOTO_SIZE, crop_with_skin_margin
+from classifiers.padded_crop import PaddedCropClassifier
 from classifiers.single_photo import PhotoClassifier
 from demo.samples import SAMPLE_ASSETS, SAMPLE_FOLDER, available_samples
 from demo.segmentation import LesionSegmenter, outline_path, overlay_png
@@ -32,15 +34,17 @@ class DemoHandler(BaseHTTPRequestHandler):
     def __init__(
         self,
         *args,
-        classifier: PhotoClassifier,
+        classifier: PhotoClassifier | PaddedCropClassifier,
         segmenter: LesionSegmenter,
         inference_lock: LockType,
+        padded_crop: bool = False,
         samples_dir: Path = ROOT.parent / "data" / SAMPLE_FOLDER,
         **kwargs,
     ) -> None:
         self.classifier = classifier
         self.segmenter = segmenter
         self.inference_lock = inference_lock
+        self.padded_crop = padded_crop
         self.samples_dir = samples_dir
         super().__init__(*args, **kwargs)
 
@@ -73,13 +77,20 @@ class DemoHandler(BaseHTTPRequestHandler):
             if stream:
                 self.start_reply(HTTPStatus.OK, ANALYSIS_STREAM)
             with self.inference_lock:
+                if self.padded_crop and photo.size != PHOTO_SIZE:
+                    photo = ImageOps.fit(photo, PHOTO_SIZE, Image.Resampling.LANCZOS)
                 mask = self.segmenter.mask(photo)
-                overlay = overlay_png(mask)
+                has_mask = mask.getbbox() is not None
+                overlay_mask = Image.new("L", photo.size, 255) if self.padded_crop and not has_mask else mask
+                overlay = overlay_png(overlay_mask)
                 if stream:
                     self.send_event({"overlay": overlay, "outline": outline_path(mask)})
 
                 result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
-                if mask.getbbox() is not None:
+                if self.padded_crop:
+                    result.update(self.classifier.predict(crop_with_skin_margin(photo, mask)))
+                    result["analysis_input"] = "padded_crop" if has_mask else "original_photo"
+                elif has_mask:
                     masked = Image.composite(photo, Image.new("RGB", photo.size), mask)
                     result.update(self.classifier.predict(masked))
             if stream:
@@ -151,7 +162,9 @@ class DemoHandler(BaseHTTPRequestHandler):
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     data_dir = Path(os.environ.get("MILK10K_DATA_DIR", ROOT.parent / "data")).expanduser()
-    parser.add_argument("--model", type=Path, default=data_dir / "models/single-photo/model.json")
+    padded_model = data_dir / "models/padded-crop"
+    default_model = padded_model if padded_model.is_dir() else data_dir / "models/single-photo/model.json"
+    parser.add_argument("--model", type=Path, default=default_model, help="A padded-crop experiment directory or a legacy model.json")
     segmentation_model = ROOT.parent / "models/unet_segmentation_full"
     if not segmentation_model.is_dir():
         segmentation_model = segmentation_model.with_suffix(".pth")
@@ -161,16 +174,28 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     args = parser.parse_args()
-    if not args.model.expanduser().is_file():
-        parser.error("Pass --model with the model.json from your single-photo evaluation run.")
+    model = args.model.expanduser()
+    padded_crop = model.is_dir()
+    if padded_crop:
+        if not all((model / name).is_file() for name in ("metrics.json", "heads.joblib")):
+            parser.error("Pass --model with the padded-crop run directory containing metrics.json and heads.joblib.")
+    elif not model.is_file():
+        parser.error("Pass --model with a padded-crop run directory or a legacy model.json.")
     checkpoint = args.segmentation_model.expanduser()
     if not (checkpoint.is_file() or (checkpoint / "data.pkl").is_file()):
         parser.error("Pass --segmentation-model with the U-Net checkpoint or its extracted folder.")
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    classifier = PhotoClassifier(args.model, device)
+    classifier = PaddedCropClassifier(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
     segmenter = LesionSegmenter(checkpoint, device)
-    handler = partial(DemoHandler, classifier=classifier, segmenter=segmenter, inference_lock=Lock(), samples_dir=data_dir / SAMPLE_FOLDER)
+    handler = partial(
+        DemoHandler,
+        classifier=classifier,
+        segmenter=segmenter,
+        inference_lock=Lock(),
+        padded_crop=padded_crop,
+        samples_dir=data_dir / SAMPLE_FOLDER,
+    )
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server:
         print(f"SkinVision is running at http://127.0.0.1:{server.server_port}", flush=True)
         try:

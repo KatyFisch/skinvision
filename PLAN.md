@@ -121,10 +121,11 @@ between datasets.
 
 ## 5. Test the phone-photo workflow and build a private demo
 
-- For the two-label MEL-vs-NV demo, use the original clinical crop as the
-  classifier input. Blacking out the background with the demo U-Net reduced
-  holdout melanoma recall and nevus specificity, with seven empty masks among
-  90 holdout melanomas. Keep segmentation available as a visible overlay.
+- For the two-label MEL-vs-NV demo, use the DermFM-Zero-Open padded-crop head.
+  Use the original crop when the U-Net returns an empty mask, as in the
+  skin-context experiment. Keep the original-photo head as the comparison
+  baseline. Blacking out the background reduced holdout melanoma recall and
+  nevus specificity.
   [Masked versus original clinical photos](classifiers/README.md#compare-masking-for-mel-vs-nv)
 - Dimming the background while retaining a rim of skin improved specificity
   at retrospectively matched sensitivity. Its locked cutoff missed the

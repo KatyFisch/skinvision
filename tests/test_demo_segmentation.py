@@ -10,6 +10,7 @@ from unittest.mock import Mock
 
 from PIL import Image, ImageChops
 
+from classifiers.lesion_crop import crop_with_skin_margin
 from demo.__main__ import ANALYSIS_STREAM, DemoHandler
 
 
@@ -20,7 +21,10 @@ class DemoSegmentationTest(TestCase):
         self.classifier = Mock()
         segmenter = Mock()
         segmenter.mask.return_value = self.mask
-        handler = partial(DemoHandler, classifier=self.classifier, segmenter=segmenter, inference_lock=Lock())
+        self.segmenter = segmenter
+
+    def start_client(self, *, padded_crop: bool = False) -> None:
+        handler = partial(DemoHandler, classifier=self.classifier, segmenter=self.segmenter, inference_lock=Lock(), padded_crop=padded_crop)
         server = self.enterContext(ThreadingHTTPServer(("127.0.0.1", 0), handler))
         Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
         self.addCleanup(server.shutdown)
@@ -33,6 +37,7 @@ class DemoSegmentationTest(TestCase):
             self.client.request("POST", "/api/predict", buffer.getvalue(), {"Content-Type": "application/octet-stream", "Accept": accept})
 
     def test_streams_outline_before_returning_prediction_on_the_same_mask(self) -> None:
+        self.start_client()
         self.mask.paste(255, (200, 120, 390, 290))
         self.mask.paste(255, (0, 20, 18, 40))
         release_classifier = Event()
@@ -73,6 +78,7 @@ class DemoSegmentationTest(TestCase):
         self.assertIsNone(ImageChops.difference(classified, expected).getbbox())
 
     def test_empty_mask_skips_classification(self) -> None:
+        self.start_client()
         self.send_photo("application/json")
         with self.client.getresponse() as response:
             self.assertEqual(response.status, 200)
@@ -86,3 +92,34 @@ class DemoSegmentationTest(TestCase):
             self.assertEqual(json.loads(response.readline())["outline"], "")
             self.assertEqual(json.loads(response.readline()), {"research_prediction": None, "route": None})
         self.classifier.predict.assert_not_called()
+
+    def test_padded_classifier_receives_the_training_crop(self) -> None:
+        self.start_client(padded_crop=True)
+        self.photo.paste((210, 25, 40), (220, 170, 255, 190))
+        self.mask.paste(255, (220, 170, 255, 190))
+        self.classifier.predict.return_value = {"research_prediction": "MEL", "route": "MEL_OR_NV"}
+
+        self.send_photo("application/json")
+        with self.client.getresponse() as response:
+            self.assertEqual(response.status, 200)
+            result = json.load(response)
+        self.assertEqual(result["research_prediction"], "MEL")
+        self.assertEqual(result["analysis_input"], "padded_crop")
+        classified = self.classifier.predict.call_args.args[0]
+        self.assertIsNone(ImageChops.difference(classified, crop_with_skin_margin(self.photo, self.mask)).getbbox())
+
+    def test_padded_classifier_uses_the_original_photo_with_an_empty_mask(self) -> None:
+        self.start_client(padded_crop=True)
+        self.classifier.predict.return_value = {"research_prediction": "NV", "route": "MEL_OR_NV"}
+
+        self.send_photo(ANALYSIS_STREAM)
+        with self.client.getresponse() as response:
+            first = json.loads(response.readline())
+            result = json.loads(response.readline())
+        self.assertEqual(first["outline"], "")
+        with Image.open(BytesIO(b64decode(first["overlay"]))) as overlay:
+            self.assertEqual(overlay.getchannel("A").getextrema(), (0, 0))
+        self.assertEqual(result["analysis_input"], "original_photo")
+        self.assertEqual(result["research_prediction"], "NV")
+        classified = self.classifier.predict.call_args.args[0]
+        self.assertIsNone(ImageChops.difference(classified, self.photo).getbbox())

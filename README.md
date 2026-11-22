@@ -46,23 +46,27 @@ extracted checkpoint in `models/unet_segmentation_full/`. Use
 `--segmentation-model` to load it from another location.
 
 ```sh
-uv run --locked python -m demo --model data/experiments/single-photo/20261121T200623773355Z/model.json
+uv run --locked python -m demo --model data/models/padded-crop
 ```
+
+Point `data/models/padded-crop` at a saved
+[skin-context run](classifiers/README.md#keep-surrounding-skin) containing
+`heads.joblib` and `metrics.json`. The demo uses that path by default when it
+exists. Pass the run directory directly with `--model` to try another run.
 
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
 the framing, then select **Analyze photo**. The U-Net finds the lesion area in
-the 600 × 450 crop. The preview traces the detected area before showing the result.
-The classifier runs on the same crop with that background set to black. If the
-mask is empty, the demo asks for another crop. Processing stays in memory on
-your computer.
-The saved router and binary specialist cutoffs were selected on unmasked photos.
-Replace the model path with `model.json` from your own
-[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
-or put a link to it at `data/models/single-photo/model.json` to omit `--model`.
+the 600 × 450 crop, and the preview traces the detected area. The classifier
+uses the lesion-centered crop with surrounding skin and displays a MEL or NV
+research label. When the mask is empty, it uses the original crop and notes
+that on the result. Processing stays in memory on your computer.
 
-On the MEL-vs-NV branch the demo shows a [melanoma score band](classifiers/README.md#melanoma-score-bands)
-and the uncalibrated score.
+To run the earlier cascade, pass a `model.json` from a
+[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline).
+The cascade uses the black-background input and shows a
+[melanoma score band](classifiers/README.md#melanoma-score-bands) on its
+MEL-vs-NV branch.
 
 To populate **Sample photos**, install the five public-domain or CC0 examples
 with `uv run --locked python -m demo.samples` (requires `curl`). The 600 × 450 JPEGs
