@@ -56,10 +56,13 @@ the 600 × 450 crop. The preview traces the detected area before showing the res
 The classifier runs on the same crop with that background set to black. If the
 mask is empty, the demo asks for another crop. Processing stays in memory on
 your computer.
-The saved classifier cutoffs were evaluated on unmasked photos.
+The saved router and binary specialist cutoffs were selected on unmasked photos.
 Replace the model path with `model.json` from your own
 [single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
 or put a link to it at `data/models/single-photo/model.json` to omit `--model`.
+
+On the MEL-vs-NV branch the demo shows a [melanoma score band](classifiers/README.md#melanoma-score-bands)
+and the uncalibrated score.
 
 To populate **Sample photos**, install the five public-domain or CC0 examples
 with `uv run --locked python -m demo.samples` (requires `curl`). The 600 × 450 JPEGs

@@ -97,6 +97,15 @@
             <div id="result-done" class="result-done" hidden>
               <p class="result-code" id="result-code"></p>
               <p class="result-label" id="result-label"></p>
+              <div class="score-band" id="result-band" hidden>
+                <div class="score-band-scale" aria-hidden="true">
+                  <span data-score-band="below"></span>
+                  <span data-score-band="low"></span>
+                  <span data-score-band="moderate"></span>
+                  <span data-score-band="high"></span>
+                </div>
+                <p>Uncalibrated model score <span id="result-score"></span></p>
+              </div>
               <dl class="result-details"><dt>Classifier branch</dt><dd id="result-route"></dd></dl>
             </div>
             <div id="result-empty" class="result-done" hidden>

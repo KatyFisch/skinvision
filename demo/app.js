@@ -12,6 +12,14 @@ const labels = {
   VASC: 'Blood vessel lesions or bleeding',
 };
 
+const melanomaBands = {
+  below: 'Below melanoma cutoff',
+  low: 'Low melanoma signal',
+  moderate: 'Moderate melanoma signal',
+  high: 'High melanoma signal',
+};
+const scoreFormat = new Intl.NumberFormat('en', { maximumSignificantDigits: 8 });
+
 const input = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const dropzone = document.getElementById('dropzone');
 const choose = document.getElementById('choose');
@@ -36,6 +44,8 @@ const resultProgress = document.getElementById('result-progress');
 const analysisPercent = document.getElementById('analysis-percent');
 const resultDone = document.getElementById('result-done');
 const resultEmpty = document.getElementById('result-empty');
+const resultBand = document.getElementById('result-band');
+const scoreSegments = resultBand.querySelectorAll('[data-score-band]');
 
 let photo;
 let selectedSample;
@@ -62,6 +72,21 @@ function showResult(state) {
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
   analyzeIcon.hidden = busy;
+}
+
+function showPrediction(data) {
+  const bandLabel = melanomaBands[data.melanoma_score_band];
+  document.querySelector('#result-code').textContent = bandLabel ? 'RESEARCH SCORE BAND' : data.research_prediction;
+  document.querySelector('#result-label').textContent = bandLabel ?? labels[data.research_prediction] ?? data.research_prediction;
+  document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
+  resultBand.hidden = !bandLabel;
+  if (bandLabel) {
+    document.querySelector('#result-score').textContent = scoreFormat.format(data.melanoma_score);
+    scoreSegments.forEach((segment) => {
+      segment.classList.toggle('is-active', segment.getAttribute('data-score-band') === data.melanoma_score_band);
+    });
+  }
+  showResult('done');
 }
 
 function clearOutline() {
@@ -365,10 +390,7 @@ analyze.addEventListener('click', async () => {
       if (data.research_prediction === null) {
         showResult('empty');
       } else {
-        document.querySelector('#result-code').textContent = data.research_prediction;
-        document.querySelector('#result-label').textContent = labels[data.research_prediction] ?? data.research_prediction;
-        document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
-        showResult('done');
+        showPrediction(data);
       }
       return;
     }

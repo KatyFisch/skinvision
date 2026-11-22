@@ -61,10 +61,10 @@ class DemoHandler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             pass
 
-    def reply_json(self, status: HTTPStatus, body: dict[str, str | None]) -> None:
+    def reply_json(self, status: HTTPStatus, body: dict[str, str | float | None]) -> None:
         self.reply(status, "application/json", json.dumps(body).encode())
 
-    def send_event(self, body: dict[str, str | None]) -> None:
+    def send_event(self, body: dict[str, str | float | None]) -> None:
         self.wfile.write((json.dumps(body) + "\n").encode())
         self.wfile.flush()
 
@@ -78,7 +78,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                 if stream:
                     self.send_event({"overlay": overlay, "outline": outline_path(mask)})
 
-                result: dict[str, str | None] = {"research_prediction": None, "route": None}
+                result: dict[str, str | float | None] = {"research_prediction": None, "route": None}
                 if mask.getbbox() is not None:
                     masked = Image.composite(photo, Image.new("RGB", photo.size), mask)
                     result.update(self.classifier.predict(masked))
@@ -88,7 +88,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                 self.reply_json(HTTPStatus.OK, {**result, "overlay": overlay})
         except RuntimeError as error:
             self.log_error("Analysis failed: %s", error)
-            message: dict[str, str | None] = {"error": "Analysis failed. Try again or restart the demo."}
+            message: dict[str, str | float | None] = {"error": "Analysis failed. Try again or restart the demo."}
             if stream:
                 self.send_event(message)
             else:

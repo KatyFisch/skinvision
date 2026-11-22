@@ -140,6 +140,27 @@ MILK10k close-ups are clinic photos. This run measures how the pipeline
 works on those photos. Independent evaluation on self-taken photos and
 clinical review are needed before using it for people's skin concerns.
 
+## Melanoma score bands
+
+The local demo describes the masked cascade's raw MEL-vs-NV specialist score
+as below cutoff, low, moderate, or high. Below cutoff uses the saved model's
+specialist cutoff. Illustrative score cutoffs of `0.50` and `0.90` start the
+moderate and high bands. The holdout used the same three-fold ensemble as the
+demo and reused the U-Net masks from the [masking comparison](#compare-masking-for-mel-vs-nv).
+
+| Band | Masked holdout melanomas | Masked holdout nevi |
+| --- | ---: | ---: |
+| Below cutoff | 1 | 0 |
+| Low | 6 | 11 |
+| Moderate | 24 | 53 |
+| High | 52 | 71 |
+
+The table covers the 218 holdout photos with nonempty masks that reached the
+specialist. It excludes seven melanomas and 14 nevi with empty masks and other
+diagnosis classes. These bands summarize the model score for the private demo.
+Clinical probabilities require calibration and validation on labeled photos
+representative of the intended use.
+
 ## Compare masking for MEL-vs-NV
 
 ```sh
