@@ -1,0 +1,16 @@
+{
+  "cutoffs": {
+    "router": 1.2076358757440175e-07
+  },
+  "weights": [
+    {
+      "routed": "fold-1-refit.pt"
+    },
+    {
+      "routed": "fold-2-refit.pt"
+    },
+    {
+      "routed": "fold-3-refit.pt"
+    }
+  ]
+}
