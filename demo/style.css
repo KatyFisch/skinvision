@@ -51,7 +51,14 @@ h1, h2, p, ul { margin: 0; }
 #preview:focus-visible { outline: 2px solid #abc6ad; outline-offset: -2px; }
 .is-panning #preview { cursor: grabbing; }
 .crop-grid { position: absolute; inset: 0; pointer-events: none; opacity: .7; background: linear-gradient(90deg, transparent calc(100% - 1px), #fff9 0) 0 0 / calc(100% / 3) 100% repeat-x, linear-gradient(transparent calc(100% - 1px), #fff9 0) 0 0 / 100% calc(100% / 3) repeat-y; transition: opacity 180ms var(--ease-out); }
-.heatmap-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; animation: pulse-heatmap 3.4s ease-in-out infinite; }
+.heatmap-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; animation: reveal-heatmap 260ms var(--ease-out); }
+.heatmap-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; margin-bottom: 4px; }
+.heatmap-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 30px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--muted); cursor: pointer; font-size: 12px; font-weight: 600; }
+.heatmap-toggle::before { content: ''; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; }
+.heatmap-toggle[aria-pressed="true"] { background: var(--wash); border-color: #bdcbbc; color: var(--green); }
+.heatmap-toggle[aria-pressed="true"]::before { background: currentColor; }
+.heatmap-scale { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 11px; }
+.heatmap-scale-bar { width: clamp(42px, 7vw, 88px); height: 6px; border-radius: 6px; background: linear-gradient(90deg, #6954d0, #ef518b 55%, #ffe760); }
 .heatmap-note { margin-bottom: 2px; color: var(--muted); font-size: 13px; font-weight: 600; }
 .lesion-outline { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .lesion-outline path { stroke-width: 2.75px; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 1px #251827a6); }
@@ -62,6 +69,7 @@ h1, h2, p, ul { margin: 0; }
 .has-outline .lesion-outline stop { animation: shift-outline-color 6s ease-in-out infinite; }
 .has-outline .lesion-outline stop:nth-child(2) { animation-delay: -2s; }
 .has-outline .lesion-outline stop:nth-child(3) { animation-delay: -4s; }
+.has-heatmap .lesion-outline path { stroke: #fffefacc; stroke-width: 1.7px; }
 .mask-scan { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .mask-scan-line { position: absolute; inset: 0; opacity: 0; background: linear-gradient(0deg, #e1f4d9 1px, #d4f2c738 2px, transparent 16%); }
 .is-segmenting .mask-scan-line { animation: scan-crop 1100ms ease-in-out; }
@@ -183,7 +191,7 @@ h1, h2, p, ul { margin: 0; }
 .photo-guide li span { color: var(--muted); font-size: 14px; }
 @keyframes radar-sweep { to { transform: rotate(360deg); } }
 @keyframes radar-echo { 0%, 100% { opacity: .4; } 42% { opacity: 1; } }
-@keyframes pulse-heatmap { 0%, 88%, 100% { opacity: 0; } 20%, 40% { opacity: 1; } }
+@keyframes reveal-heatmap { from { opacity: 0; } }
 @keyframes appear { from { opacity: 0; transform: translateY(3px); } }
 @keyframes draw-outline {
   from { stroke-dasharray: 1; stroke-dashoffset: 1; }

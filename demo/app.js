@@ -25,6 +25,8 @@ const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('previ
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
 const heatmapOverlay = /** @type {HTMLImageElement} */ (document.getElementById('heatmap-overlay'));
+const heatmapControls = document.getElementById('heatmap-controls');
+const heatmapToggle = document.getElementById('heatmap-toggle');
 const heatmapNote = document.getElementById('heatmap-note');
 const lesionPath = document.getElementById('lesion-path');
 const maskScanLine = document.getElementById('mask-scan-line');
@@ -71,6 +73,14 @@ function showResult(state) {
   analyzeIcon.hidden = busy;
 }
 
+function setHeatmapVisible(visible) {
+  heatmapToggle.setAttribute('aria-pressed', String(visible));
+  heatmapOverlay.hidden = !visible;
+  cropFrame.classList.toggle('has-heatmap', visible);
+}
+
+heatmapToggle.addEventListener('click', () => setHeatmapVisible(heatmapOverlay.hidden));
+
 function predictionCopy(data) {
   if (data.analysis_input === 'original_photo' || data.research_prediction === null) {
     return { title: 'Lesion not detected', description: 'Frame the whole lesion and try again.' };
@@ -103,11 +113,12 @@ function showPrediction(data) {
     const png = Uint8Array.from(atob(data.heatmap), (character) => character.charCodeAt(0));
     heatmapUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
     heatmapOverlay.src = heatmapUrl;
-    heatmapOverlay.hidden = false;
-    heatmapNote.textContent = 'Grad-CAM shown inside the lesion outline';
-    heatmapNote.hidden = false;
+    const target = data.research_prediction === 'MEL' ? 'Melanoma' : data.research_prediction === 'NV' ? 'Nevus' : 'Model';
+    heatmapToggle.textContent = `${target} heatmap`;
+    heatmapControls.hidden = false;
+    setHeatmapVisible(true);
   } else if (data.heatmap === null) {
-    heatmapNote.textContent = 'No strong Grad-CAM activations inside the lesion outline';
+    heatmapNote.textContent = 'No visible heatmap signal inside the lesion outline';
     heatmapNote.hidden = false;
   }
   const { title, description, signal } = predictionCopy(data);
@@ -121,7 +132,8 @@ function showPrediction(data) {
 function clearAnalysisPreview() {
   cropFrame.classList.remove('is-segmenting', 'has-outline');
   lesionPath.removeAttribute('d');
-  heatmapOverlay.hidden = true;
+  setHeatmapVisible(false);
+  heatmapControls.hidden = true;
   heatmapNote.hidden = true;
   heatmapOverlay.removeAttribute('src');
   if (heatmapUrl) URL.revokeObjectURL(heatmapUrl);

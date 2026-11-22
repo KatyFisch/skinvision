@@ -46,6 +46,12 @@
           </div>
         </div>
         <div class="crop-controls" id="crop-controls" hidden>
+          <div class="heatmap-controls" id="heatmap-controls" hidden>
+            <button class="heatmap-toggle" id="heatmap-toggle" type="button" aria-controls="heatmap-overlay" aria-pressed="false">Heatmap</button>
+            <div class="heatmap-scale" role="img" aria-label="Relative model support within the lesion outline, weaker to stronger">
+              <span aria-hidden="true">Weaker</span><span class="heatmap-scale-bar" aria-hidden="true"></span><span aria-hidden="true">Stronger</span>
+            </div>
+          </div>
           <p class="heatmap-note" id="heatmap-note" hidden></p>
           <div class="crop-meta">
             <p id="crop-help">Drag the photo or use arrow keys to frame it.</p>

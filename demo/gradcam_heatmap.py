@@ -31,8 +31,12 @@ from torchvision import transforms
 
 from classifiers.export_padded_crop import PaddedCropTorchModel
 
-HEAT_THRESHOLD = 0.30
+HEAT_THRESHOLD = 0.18
+MIN_HEAT_CEILING = 0.55
 MAX_HEATMAP_ALPHA = round(0.75 * 255)
+# The legend in style.css uses these same color stops.
+HEAT_STOPS = (0.0, 0.55, 1.0)
+HEAT_COLORS = ((105, 84, 208), (239, 81, 139), (255, 231, 96))
 
 
 class GradCAMWrapper(nn.Module):
@@ -153,8 +157,9 @@ def padded_crop_heatmap(photo: Image.Image, classifier: PaddedCropTorchModel, pr
         patches = tokens[:, encoder.num_prefix_tokens :]
         return patches.reshape(tokens.shape[0], rows, columns, tokens.shape[-1]).permute(0, 3, 1, 2).float()
 
-    layer = encoder.get_submodule(f"blocks.{len(encoder.blocks) - 1}.norm1")
-    heat = tensor_heatmap(classifier, padded, layer, classifier.labels.index(prediction), reshape)
+    # DermFM mean-pools the final patch tokens, so those tokens still contribute
+    # to the score after the last attention block. Hook them just before pooling.
+    heat = tensor_heatmap(classifier, padded, encoder.norm, classifier.labels.index(prediction), reshape)
     return heat[:height, :width]
 
 
@@ -163,15 +168,20 @@ def heatmap_overlay(heatmap: np.ndarray, mask: Image.Image, box: tuple[int, int,
     aligned = Image.new("F", mask.size)
     resized = Image.fromarray(heatmap).resize((right - left, bottom - top), Image.Resampling.BILINEAR)
     aligned.paste(resized, (left, top))
-    strength = np.clip((np.asarray(aligned) - HEAT_THRESHOLD) / (1 - HEAT_THRESHOLD), 0, 1)
-    strength = np.where(np.asarray(mask) > 0, strength, 0)
-
-    alpha = np.rint(np.sqrt(strength) * MAX_HEATMAP_ALPHA).astype(np.uint8)
-    if not alpha.any():
+    values = np.asarray(aligned)
+    visible = (np.asarray(mask) > 0) & (values > HEAT_THRESHOLD)
+    if not visible.any():
         return None
-    green = np.rint(100 + 139 * strength).astype(np.uint8)
-    blue = np.rint(75 + 62 * strength).astype(np.uint8)
-    rgba = np.stack((np.full_like(alpha, 255), green, blue, alpha), axis=-1)
+
+    # Keep a single hotspot from compressing the rest of the visible range.
+    ceiling = max(MIN_HEAT_CEILING, float(np.percentile(values[visible], 95)))
+    strength = np.clip((values[visible] - HEAT_THRESHOLD) / (ceiling - HEAT_THRESHOLD), 0, 1)
+    rgba = np.zeros((*values.shape, 4), dtype=np.uint8)
+    channels = [np.interp(strength, HEAT_STOPS, channel) for channel in zip(*HEAT_COLORS, strict=True)]
+    rgba[visible, :3] = np.rint(np.stack(channels, axis=-1)).astype(np.uint8)
+    rgba[visible, 3] = np.rint(strength**0.7 * MAX_HEATMAP_ALPHA).astype(np.uint8)
+    if not rgba[..., 3].any():
+        return None
     with BytesIO() as buffer:
         Image.fromarray(rgba).save(buffer, format="PNG")
         return b64encode(buffer.getvalue()).decode("ascii")

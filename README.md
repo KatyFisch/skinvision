@@ -87,11 +87,12 @@ uses the lesion-centered crop with surrounding skin. When it returns MEL,
 the card shows **Inconclusive**, **Moderate melanoma signal**, or
 **Strong melanoma signal** according to the model's score band. Other
 predicted diagnoses appear as possible matches. The browser console logs the
-raw melanoma score or the score for the highest-ranked other diagnosis. The
-pulsing Grad-CAM overlay highlights stronger positive contributions inside
-the original U-Net outline.
-It shows normalized heat above 0.30 and reaches at most 75% opacity. When the
-mask is empty, the demo prompts the user to adjust the crop.
+raw melanoma score or the score for the highest-ranked other diagnosis.
+For MEL/NV predictions, Grad-CAM highlights relative support for the predicted
+class inside the U-Net outline. The scale runs from purple (weaker) to gold
+(stronger). Very low activations stay transparent and the overlay peaks at
+75% opacity. Toggle it off to compare with the photo. When the mask is empty,
+the demo prompts the user to adjust the crop.
 Processing stays in memory on your computer.
 
 ### Use different checkpoints
