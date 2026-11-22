@@ -20,6 +20,7 @@ from classifiers.model import DermFMClassifier
 from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import LesionRouter, PhotoClassifier
 from demo.gradcam_heatmap import heatmap_overlay, padded_crop_heatmap
+from demo.model_assets import ROUTER_MANIFEST, SEGMENTATION_CHECKPOINT, download_checkpoints
 from demo.samples import BUNDLED_SAMPLE_DIR, SAMPLE_ASSETS, available_samples
 from demo.segmentation import outline_path, overlay_png
 
@@ -183,16 +184,10 @@ def main() -> None:
         default=default_model,
         help="Exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json",
     )
-    router_default = data_dir / "models/cascade-router/model.json"
-    other_default = data_dir / "models/direct-11"
-    parser.add_argument("--router-model", type=Path, help=f"Cascade manifest for the router (default if present: {router_default})")
-    parser.add_argument("--other-model", type=Path, help=f"Direct 11-class run for other diagnoses (default if present: {other_default})")
-    segmentation_model = ROOT.parent / "models/unet_segmentation_full"
-    if not segmentation_model.is_dir():
-        segmentation_model = segmentation_model.with_suffix(".pth")
-    parser.add_argument(
-        "--segmentation-model", type=Path, default=segmentation_model, help="Segmentation checkpoint file or extracted folder"
-    )
+    parser.add_argument("--router-model", type=Path, help="Use a local router manifest instead of the pinned demo router")
+    parser.add_argument("--other-model", type=Path, help="Use a local direct 11-class run instead of the bundled heads")
+    parser.add_argument("--segmentation-model", type=Path, help="Use a local U-Net checkpoint file or extracted folder")
+    parser.add_argument("--mel-nv-only", action="store_true", help="Use the padded-crop classifier without routing")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--device", choices=["cpu", "mps", "cuda"])
     args = parser.parse_args()
@@ -204,21 +199,45 @@ def main() -> None:
     elif not model.is_file():
         parser.error("Pass --model with exported padded-crop heads (.pth), a padded-crop run directory, or a legacy model.json.")
     padded_crop = run_dir or model.suffix == ".pth"
-    if not padded_crop and (args.router_model or args.other_model):
-        parser.error("A separate router and other-diagnosis model require a padded-crop --model.")
-    router_model = (args.router_model or router_default).expanduser()
+    use_routing = padded_crop and not args.mel_nv_only
+    if not use_routing and (args.router_model or args.other_model):
+        parser.error("A separate router and other-diagnosis model require a padded-crop --model with routing enabled.")
+    local_router = data_dir / "models/cascade-router/model.json"
+    router_model = args.router_model or (local_router if local_router.is_file() else None)
+    if router_model is not None:
+        router_model = router_model.expanduser()
+        if not router_model.is_file():
+            parser.error("Pass --router-model with a saved router manifest.")
+    local_other = data_dir / "models/direct-11"
+    other_default = local_other if local_other.is_dir() else ROOT.parent / "models/direct-11"
     other_model = (args.other_model or other_default).expanduser()
-    use_routing = padded_crop and bool(args.router_model or args.other_model or router_model.exists() or other_model.exists())
-    if use_routing and not (router_model.is_file() and all((other_model / name).is_file() for name in ("metrics.json", "heads.joblib"))):
-        parser.error("Routed analysis requires a cascade --router-model manifest and a direct 11-class --other-model directory.")
-    checkpoint = args.segmentation_model.expanduser()
-    if not (checkpoint.is_file() or (checkpoint / "data.pkl").is_file()):
+    if use_routing and not all((other_model / name).is_file() for name in ("metrics.json", "heads.joblib")):
+        parser.error("Pass --other-model with a direct 11-class directory containing metrics.json and heads.joblib.")
+
+    local_checkpoint = ROOT.parent / "models" / SEGMENTATION_CHECKPOINT
+    extracted = local_checkpoint.with_suffix("")
+    checkpoint = args.segmentation_model.expanduser() if args.segmentation_model else None
+    if checkpoint is not None and not (checkpoint.is_file() or (checkpoint / "data.pkl").is_file()):
         parser.error("Pass --segmentation-model with the U-Net checkpoint or its extracted folder.")
+    if checkpoint is None:
+        if (extracted / "data.pkl").is_file():
+            checkpoint = extracted
+        elif local_checkpoint.is_file():
+            checkpoint = local_checkpoint
+
+    if checkpoint is None or (use_routing and router_model is None):
+        try:
+            bundled = download_checkpoints(ROOT.parent, data_dir)
+        except (OSError, RuntimeError) as error:
+            parser.error(str(error))
+        checkpoint = checkpoint or bundled / SEGMENTATION_CHECKPOINT
+        router_model = router_model or bundled / ROUTER_MANIFEST
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
     classifier = PaddedCropTorchModel(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
     routing = None
     if use_routing and isinstance(classifier, PaddedCropTorchModel):
+        assert router_model is not None
         router = LesionRouter(router_model, device)
         other_classifier = DermFMClassifier(other_model, data_dir, device, expected_task="direct_11", encoder=classifier.encoder)
         routing = (router, other_classifier)

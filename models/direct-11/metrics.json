@@ -1,0 +1,561 @@
+{
+  "task": "direct_11",
+  "diagnosis_order": [
+    "AKIEC",
+    "BCC",
+    "BEN_OTH",
+    "BKL",
+    "DF",
+    "INF",
+    "MAL_OTH",
+    "MEL",
+    "NV",
+    "SCCKA",
+    "VASC"
+  ],
+  "methods": {
+    "direct_11": {
+      "cutoff": 0.0006960888858884573
+    }
+  },
+  "calibration_seed": 42,
+  "calibration_fraction": 0.2,
+  "melanoma_sensitivity_target": 0.95,
+  "regularization_c": 1.0,
+  "scikit_learn": "1.9.1",
+  "training_rows_per_member": {
+    "1": 2244,
+    "2": 2245,
+    "3": 2245
+  },
+  "manifest_sha256": "66f6c9fe5f0190d0382d6aeffeeee99b4a78018a41579b8d040607dfe43dce82",
+  "ground_truth": "MILK10k_Training_GroundTruth.csv",
+  "encoder": {
+    "checkpoint": "redlessone/DermFM-Zero@2039b405065ff5ead7e58c04ec5604bd1e4a7769/open_clip_pytorch_model.bin",
+    "source": "https://github.com/SiyuanYan1/DermFM-Zero/tree/c9f3d6a149ab048ae8a98ea4701e23b271e7368a",
+    "license": "CC BY-NC-ND 4.0",
+    "sha256": "83f498e3ee5e0963a14356b2d0facde640a2f108972d12437705a805f30d2918",
+    "preprocessing": "Compose(\n    PILToTensor()\n    ConvertImageDtype()\n    Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))\n); native full frame, normalized zero padding to 16-pixel patches, bicubic positional interpolation",
+    "feature": "mean patch embeddings followed by LayerNorm, before vision-language projection",
+    "torch": "2.15.0",
+    "torchvision": "0.29.2",
+    "timm": "1.0.31",
+    "device": "mps",
+    "dtype": "torch.float16",
+    "feature_cache_version": "1",
+    "image_columns": "clinical_path"
+  },
+  "feature_cache_hit": true,
+  "feature_dimensions": 1024,
+  "pretraining_isic_id_overlap": {
+    "listed_isic_images": 38404,
+    "source": "redlessone/DermFM-Zero@2039b405065ff5ead7e58c04ec5604bd1e4a7769/pretrain_image_lists/isic_image_ids.txt",
+    "sha256": "fe92cbf950b3ac4b01c07e03b5af1e71fadff4b32ba7d9c7334b7770a6474f51",
+    "exact_matches_by_split": {
+      "development": {
+        "clinical": 0,
+        "dermoscopic": 0
+      },
+      "holdout": {
+        "clinical": 0,
+        "dermoscopic": 0
+      }
+    }
+  },
+  "calibration": {
+    "lesions": 825,
+    "melanoma_sensitivity": {
+      "count": 69,
+      "total": 72,
+      "rate": 0.9583333333333334,
+      "wilson_95_ci": [
+        0.8845072325868389,
+        0.9857291925330748
+      ]
+    },
+    "melanoma_specificity": {
+      "count": 510,
+      "total": 753,
+      "rate": 0.6772908366533864,
+      "wilson_95_ci": [
+        0.643071559475126,
+        0.7097103830152309
+      ]
+    },
+    "melanoma_auroc": 0.9309428950863212,
+    "classification_report": {
+      "AKIEC": {
+        "precision": 0.5263157894736842,
+        "recall": 0.20833333333333334,
+        "f1-score": 0.29850746268656714,
+        "support": 48.0
+      },
+      "BCC": {
+        "precision": 0.8222222222222222,
+        "recall": 0.736318407960199,
+        "f1-score": 0.7769028871391076,
+        "support": 402.0
+      },
+      "BEN_OTH": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 6.0
+      },
+      "BKL": {
+        "precision": 0.4222222222222222,
+        "recall": 0.21839080459770116,
+        "f1-score": 0.2878787878787879,
+        "support": 87.0
+      },
+      "DF": {
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "f1-score": 0.5,
+        "support": 6.0
+      },
+      "INF": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 6.0
+      },
+      "MAL_OTH": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 0.0
+      },
+      "MEL": {
+        "precision": 0.22115384615384615,
+        "recall": 0.9583333333333334,
+        "f1-score": 0.359375,
+        "support": 72.0
+      },
+      "NV": {
+        "precision": 0.8,
+        "recall": 0.17094017094017094,
+        "f1-score": 0.28169014084507044,
+        "support": 117.0
+      },
+      "SCCKA": {
+        "precision": 0.6779661016949152,
+        "recall": 0.5333333333333333,
+        "f1-score": 0.5970149253731343,
+        "support": 75.0
+      },
+      "VASC": {
+        "precision": 1.0,
+        "recall": 0.16666666666666666,
+        "f1-score": 0.2857142857142857,
+        "support": 6.0
+      },
+      "accuracy": 0.553939393939394,
+      "macro avg": {
+        "precision": 0.49726183470608093,
+        "recall": 0.3023317621361883,
+        "f1-score": 0.30791668087608665,
+        "support": 825.0
+      },
+      "weighted avg": {
+        "precision": 0.6847277080140595,
+        "recall": 0.553939393939394,
+        "f1-score": 0.5575902120975456,
+        "support": 825.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        10,
+        16,
+        1,
+        6,
+        0,
+        0,
+        0,
+        10,
+        0,
+        5,
+        0
+      ],
+      [
+        4,
+        296,
+        0,
+        16,
+        0,
+        0,
+        0,
+        76,
+        1,
+        9,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        25,
+        0,
+        19,
+        0,
+        1,
+        0,
+        34,
+        2,
+        5,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        0,
+        2,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        69,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        1,
+        0,
+        0,
+        0,
+        93,
+        20,
+        0,
+        0
+      ],
+      [
+        4,
+        16,
+        0,
+        2,
+        0,
+        0,
+        0,
+        13,
+        0,
+        40,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        1
+      ]
+    ]
+  },
+  "holdout": {
+    "lesions": 1048,
+    "melanoma_sensitivity": {
+      "count": 86,
+      "total": 90,
+      "rate": 0.9555555555555556,
+      "wilson_95_ci": [
+        0.8912314496718777,
+        0.9825827581472913
+      ]
+    },
+    "melanoma_specificity": {
+      "count": 649,
+      "total": 958,
+      "rate": 0.6774530271398748,
+      "wilson_95_ci": [
+        0.6471943128073848,
+        0.7062942968610643
+      ]
+    },
+    "melanoma_auroc": 0.9239155648341453,
+    "classification_report": {
+      "AKIEC": {
+        "precision": 0.6363636363636364,
+        "recall": 0.22950819672131148,
+        "f1-score": 0.3373493975903614,
+        "support": 61.0
+      },
+      "BCC": {
+        "precision": 0.8502109704641351,
+        "recall": 0.7996031746031746,
+        "f1-score": 0.8241308793456033,
+        "support": 504.0
+      },
+      "BEN_OTH": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 9.0
+      },
+      "BKL": {
+        "precision": 0.4666666666666667,
+        "recall": 0.1926605504587156,
+        "f1-score": 0.2727272727272727,
+        "support": 109.0
+      },
+      "DF": {
+        "precision": 1.0,
+        "recall": 0.4,
+        "f1-score": 0.5714285714285714,
+        "support": 10.0
+      },
+      "INF": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 10.0
+      },
+      "MAL_OTH": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1-score": 0.0,
+        "support": 2.0
+      },
+      "MEL": {
+        "precision": 0.21772151898734177,
+        "recall": 0.9555555555555556,
+        "f1-score": 0.354639175257732,
+        "support": 90.0
+      },
+      "NV": {
+        "precision": 0.6774193548387096,
+        "recall": 0.14093959731543623,
+        "f1-score": 0.23333333333333334,
+        "support": 149.0
+      },
+      "SCCKA": {
+        "precision": 0.7066666666666667,
+        "recall": 0.5638297872340425,
+        "f1-score": 0.6272189349112426,
+        "support": 94.0
+      },
+      "VASC": {
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1-score": 0.3333333333333333,
+        "support": 10.0
+      },
+      "accuracy": 0.5763358778625954,
+      "macro avg": {
+        "precision": 0.505004437635196,
+        "recall": 0.31655426017165783,
+        "f1-score": 0.3231055361752228,
+        "support": 1048.0
+      },
+      "weighted avg": {
+        "precision": 0.6919353672187669,
+        "recall": 0.5763358778625954,
+        "f1-score": 0.5728606302858847,
+        "support": 1048.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        14,
+        18,
+        0,
+        4,
+        0,
+        0,
+        0,
+        21,
+        1,
+        3,
+        0
+      ],
+      [
+        2,
+        403,
+        0,
+        11,
+        0,
+        0,
+        0,
+        75,
+        1,
+        12,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        8,
+        0,
+        0,
+        0
+      ],
+      [
+        4,
+        19,
+        0,
+        21,
+        0,
+        0,
+        0,
+        55,
+        3,
+        7,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        0,
+        4,
+        0,
+        0,
+        3,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        0,
+        0,
+        0,
+        86,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        6,
+        0,
+        2,
+        0,
+        0,
+        0,
+        120,
+        21,
+        0,
+        0
+      ],
+      [
+        2,
+        20,
+        0,
+        4,
+        0,
+        0,
+        0,
+        15,
+        0,
+        53,
+        0
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        6,
+        1,
+        0,
+        2
+      ]
+    ]
+  }
+}

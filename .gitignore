@@ -76,6 +76,7 @@ data/*
 *.safetensors
 *.pkl
 *.joblib
+!/models/direct-11/heads.joblib
 
 # TensorFlow / PyTorch logs
 runs/

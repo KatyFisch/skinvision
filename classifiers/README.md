@@ -50,11 +50,11 @@ DermFM-Zero-Open weights. Padded-crop inference also needs the U-Net checkpoint.
 Keep the raw data, training outputs, and downloaded encoder weights local.
 Load model bundles from trusted sources.
 
-The demo defaults to the checked-in padded-crop heads. Pass a saved padded-crop
-directory to the demo with `--model` to try a new run. The demo also accepts the
-existing ResNet cascade `model.json` and its referenced checkpoints. The
-[three-model demo](../README.md#run-the-three-model-demo) uses the saved router,
-the padded-crop specialist, and a direct 11-class run for other diagnoses.
+The [demo](../README.md#run-the-local-photo-demo) uses the checked-in padded-crop
+and direct 11-class heads and fetches the router and U-Net checkpoints from the
+repository on first use. Pass a saved padded-crop directory with `--model` to
+try a new run. The demo also accepts the existing ResNet cascade `model.json`
+and its referenced checkpoints.
 
 ## Explain a padded-crop prediction
 

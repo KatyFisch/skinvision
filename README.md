@@ -55,19 +55,21 @@ we kept the padded-crop and direct 11-class recipes.
 
 ## Run the local photo demo
 
-Place the U-Net checkpoint at `models/unet_segmentation_full.pth`, or keep the
-extracted checkpoint in `models/unet_segmentation_full/`. Use
-`--segmentation-model` to load it from another location.
+Pull `main` and start the demo from the repository root:
 
 ```sh
 uv run --locked python -m demo
 ```
 
-The demo uses the fitted heads in `models/mel-vs-nv-padded-crop.pth` from Git
-and reuses the DermFM encoder downloaded by the training notebook. Keep
-`MILK10K_DATA_DIR` set to the same directory if you set it for the notebook.
+The fitted MEL/NV and direct 11-class heads come with the checkout. On first
+launch, the demo downloads missing router and U-Net checkpoints from the
+`demo-checkpoints-v1` tag on `origin` using the same Git access as `git pull`.
+It stores the bundle under `data/checkpoints/` and reuses it on later runs.
+
+The demo also reuses the DermFM encoder downloaded by the training notebook.
+Keep `MILK10K_DATA_DIR` set to the same directory if you set it for the notebook.
 If you still need the encoder, follow the [classifier setup](classifiers/README.md#set-up)
-to enable the first-run download.
+to enable the Hugging Face download on first launch.
 
 To try a newly trained model, pass the directory from the notebook's save step
 containing `heads.joblib` and `metrics.json`.
@@ -89,21 +91,21 @@ is empty, the classifier uses the original crop and the demo displays an
 inconclusive result with instructions to adjust the crop.
 Processing stays in memory on your computer.
 
-### Run the three-model demo
+### Use different checkpoints
 
-With a saved ResNet cascade and direct 11-class run, start the demo with:
+To use a saved ResNet cascade router and a different direct 11-class run:
 
 ```sh
 uv run --locked python -m demo --router-model path/to/cascade/model.json --other-model path/to/direct-11-run
 ```
 
-The demo also enables routing when both `data/models/cascade-router/model.json`
-and `data/models/direct-11/` are present. `MILK10K_DATA_DIR` replaces `data/`
-in these paths when set. Keep the cascade manifest beside its original
-relative checkpoint paths or link its directory into `data/models/cascade-router`.
-Use a trusted direct 11-class run containing `metrics.json` and `heads.joblib`.
-The extra weights are local artifacts. A checkout with no router or direct
-model still runs the padded-crop demo.
+The demo still recognizes local overrides at `data/models/cascade-router/model.json`
+and `data/models/direct-11/`. `MILK10K_DATA_DIR` replaces `data/` in these paths
+when set. Keep the router manifest's relative paths to the fold checkpoints
+intact. Use a trusted direct 11-class run containing `metrics.json` and `heads.joblib`.
+The demo also reuses an existing `models/unet_segmentation_full.pth` or its
+extracted folder. Pass `--segmentation-model` for another location and
+`--mel-nv-only` to run just the padded-crop classifier.
 
 The router scores the full frame at its saved cutoff. The MEL/NV branch uses
 the padded crop and reports the binary model's suggestion and melanoma signal.
