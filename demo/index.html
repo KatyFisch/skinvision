@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkinVision · Photo analysis</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>SkinVision</div>
+      <span class="mode"><span aria-hidden="true"></span>Local research demo</span>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="intro">
+      <h1>Analyze a lesion photo</h1>
+      <p>Run one close-up through the SkinVision classifiers.</p>
+    </div>
+
+    <div class="workspace">
+      <section class="panel photo-panel" aria-labelledby="photo-title">
+        <h2 id="photo-title">Lesion photo</h2>
+        <input id="file-input" type="file" accept="image/jpeg,image/png,.jpg,.jpeg,.png" hidden>
+        <div class="dropzone" id="dropzone">
+          <div class="drop-content" id="empty-photo">
+            <span class="upload-mark" aria-hidden="true"><span>↑</span></span>
+            <button class="button secondary" id="choose" type="button">Choose photo</button>
+            <p>or drop or paste an image here</p>
+            <small>JPEG or PNG · up to 20 MB</small>
+          </div>
+          <div class="crop-frame" id="crop-frame" hidden>
+            <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
+            <div class="crop-grid" aria-hidden="true"></div>
+          </div>
+        </div>
+        <div class="crop-controls" id="crop-controls" hidden>
+          <div class="crop-meta">
+            <p id="crop-help">Drag the photo or use arrow keys to frame it.</p>
+            <span>600 × 450 px</span>
+          </div>
+          <div class="crop-tools">
+            <label for="crop-zoom">Zoom</label>
+            <input id="crop-zoom" type="range" min="100" max="400" value="100" aria-valuetext="100%">
+            <span id="crop-zoom-value" aria-hidden="true">100%</span>
+            <button class="button quiet" id="reset-crop" type="button">Reset crop</button>
+          </div>
+        </div>
+        <div class="file-row" id="file-row" hidden>
+          <span id="file-name"></span>
+          <button type="button" class="button quiet" id="replace">Replace</button>
+          <button type="button" class="button quiet remove" id="remove" aria-label="Remove photo" title="Remove photo">×</button>
+        </div>
+        <p class="error" id="upload-error" role="alert" hidden></p>
+        <button type="button" class="button primary" id="analyze" aria-disabled="true" title="Choose a photo first">
+          <span id="analyze-label">Analyze photo</span><span aria-hidden="true" id="analyze-icon">↗</span>
+        </button>
+      </section>
+
+      <div class="side">
+        <section class="panel result-panel" aria-labelledby="result-title">
+          <h2 id="result-title">Model result</h2>
+          <div id="result" role="status" aria-atomic="true">
+            <div id="result-idle" class="result-placeholder">
+              <span class="result-mark" aria-hidden="true"></span>
+              <p>Choose a photo and run analysis to see the predicted label and classifier branch.</p>
+            </div>
+            <div id="result-loading" class="result-placeholder" hidden>
+              <span class="spinner" aria-hidden="true"></span>
+              <p>Analyzing photo…</p>
+            </div>
+            <div id="result-done" class="result-done" hidden>
+              <p class="result-code" id="result-code"></p>
+              <p class="result-label" id="result-label"></p>
+              <dl class="result-details"><dt>Classifier branch</dt><dd id="result-route"></dd></dl>
+            </div>
+          </div>
+        </section>
+        <aside class="research-note" aria-labelledby="research-title">
+          <h2 id="research-title">Research use only</h2>
+          <p>Use curated examples. This model was evaluated on clinic photos and produced many false melanoma flags. Use a clinician’s assessment for personal skin concerns.</p>
+        </aside>
+      </div>
+    </div>
+
+    <section class="photo-guide" aria-labelledby="guide-title">
+      <h2 id="guide-title">Taking a clear close-up</h2>
+      <ul>
+        <li><strong>Use even light</strong><span>Choose soft daylight and check for glare or shadows.</span></li>
+        <li><strong>Leave a margin</strong><span>Keep the whole lesion and a little surrounding skin in frame.</span></li>
+        <li><strong>Check focus</strong><span>Tap the lesion to focus. Back up slightly if the edges are blurry.</span></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

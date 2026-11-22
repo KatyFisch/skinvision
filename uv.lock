@@ -2979,6 +2979,7 @@ dependencies = [
     { name = "seaborn" },
     { name = "segmentation-models-pytorch" },
     { name = "streamlit" },
+    { name = "timm" },
     { name = "torch" },
     { name = "torchvision" },
 ]
@@ -3006,6 +3007,7 @@ requires-dist = [
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "segmentation-models-pytorch", specifier = ">=0.6.0" },
     { name = "streamlit", specifier = ">=1.67.0" },
+    { name = "timm", specifier = ">=1.0.31" },
     { name = "torch", specifier = ">=2.15.0" },
     { name = "torchvision", specifier = ">=0.29.2" },
 ]
