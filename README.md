@@ -39,6 +39,20 @@ another checkout, set `MILK10K_DATA_DIR` to its absolute path.
 
 Clear notebook outputs before committing to keep lesion photos out of Git.
 
+## Train and run a classifier
+
+Open [Train and use a clinical-photo classifier](notebooks/02_train_classifiers.ipynb)
+to configure the data path and task, prepare the photos, train, evaluate, and save
+a model, then classify a curated image.
+
+```sh
+uv run --locked jupyter lab --LabApp.extension_manager=readonly notebooks/02_train_classifiers.ipynb
+```
+
+See the [classifier setup](classifiers/README.md) for checkpoint requirements and
+the [experiment record](docs/classifier-experiments.md) for what we tried and why
+we kept the padded-crop and direct 11-class recipes.
+
 ## Run the local photo demo
 
 Place the U-Net checkpoint at `models/unet_segmentation_full.pth`, or keep the
@@ -49,10 +63,10 @@ extracted checkpoint in `models/unet_segmentation_full/`. Use
 uv run --locked python -m demo --model data/models/padded-crop
 ```
 
-Point `data/models/padded-crop` at a saved
-[skin-context run](classifiers/README.md#keep-surrounding-skin) containing
+Point `data/models/padded-crop` at a saved padded-crop model directory containing
 `heads.joblib` and `metrics.json`. The demo uses that path by default when it
-exists. Pass the run directory directly with `--model` to try another run.
+exists. Pass the directory from the notebook's save step with `--model` to use
+a newly trained model.
 
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
@@ -62,10 +76,9 @@ uses the lesion-centered crop with surrounding skin and displays a MEL or NV
 research label. When the mask is empty, it uses the original crop and notes
 that on the result. Processing stays in memory on your computer.
 
-To run the earlier cascade, pass a `model.json` from a
-[single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline).
-The cascade uses the black-background input and shows a
-[melanoma score band](classifiers/README.md#melanoma-score-bands) on its
+To run the saved legacy cascade, pass its `model.json` with `--model`. Keep the
+checkpoints referenced by that file at their saved relative paths. The cascade
+uses the black-background input and shows a melanoma score band on its
 MEL-vs-NV branch.
 
 To populate **Sample photos**, install the five public-domain or CC0 examples

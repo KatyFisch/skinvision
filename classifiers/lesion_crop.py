@@ -2,11 +2,18 @@
 
 import math
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 PHOTO_SIZE = (600, 450)
 SKIN_MARGIN_PX = 12
 CROP_MARGIN_FRACTION = 0.25
+PADDED_CROP_SETTINGS = {"margin_fraction_of_longest_side": CROP_MARGIN_FRACTION, "minimum_margin_px": SKIN_MARGIN_PX}
+
+
+def frame_photo(photo: Image.Image) -> Image.Image:
+    if photo.size == PHOTO_SIZE:
+        return photo
+    return ImageOps.fit(photo, PHOTO_SIZE, Image.Resampling.LANCZOS)
 
 
 def crop_with_skin_margin(photo: Image.Image, mask: Image.Image) -> Image.Image:

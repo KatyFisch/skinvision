@@ -1,7 +1,9 @@
 """Frozen image embeddings from the gated DermFM-Zero-Open research checkpoint."""
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -9,12 +11,12 @@ import timm
 import torch
 import torchvision
 from huggingface_hub import hf_hub_download
+from PIL import Image
 from timm.layers.pos_embed import resample_abs_pos_embed
 from timm.models.vision_transformer import VisionTransformer
 from torchvision import transforms
 
 from classifiers.encoders import FEATURE_CACHE_VERSION, cached_embeddings
-from classifiers.panderm import convert_attention_weights
 
 NAME = "dermfm_zero_open"
 REPOSITORY = "redlessone/DermFM-Zero"
@@ -69,6 +71,17 @@ def pretraining_id_overlap(rows: pd.DataFrame, data_dir: Path) -> dict:
     }
 
 
+def convert_attention_weights(state: dict[str, torch.Tensor], *, depth: int) -> None:
+    """Map the checkpoint's PanDerm attention biases and residual scales to timm."""
+    for index in range(depth):
+        prefix = f"blocks.{index}"
+        query = state.pop(f"{prefix}.attn.q_bias")
+        value = state.pop(f"{prefix}.attn.v_bias")
+        state[f"{prefix}.attn.qkv.bias"] = torch.cat((query, torch.zeros_like(value), value))
+        state[f"{prefix}.ls1.gamma"] = state.pop(f"{prefix}.gamma_1")
+        state[f"{prefix}.ls2.gamma"] = state.pop(f"{prefix}.gamma_2")
+
+
 def build_encoder(checkpoint: Path, device: torch.device, dtype: torch.dtype) -> DermFMVisionTransformer:
     state = torch.load(checkpoint, map_location="cpu", weights_only=True, mmap=True)
     state = state.get("state_dict", state)
@@ -121,7 +134,15 @@ def load_clinical_encoder(data_dir: Path, device: torch.device) -> DermFMVisionT
     return build_encoder(checkpoint, device, clinical_dtype(device))
 
 
-def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, batch_size: int) -> tuple[np.ndarray, dict[str, str], bool]:
+def encode_clinical(
+    rows: pd.DataFrame,
+    data_dir: Path,
+    device: torch.device,
+    batch_size: int,
+    *,
+    prepare_photo: Callable[[Image.Image], Image.Image] | None = None,
+    image_settings: dict[str, str] | None = None,
+) -> tuple[np.ndarray, dict[str, str], bool]:
     preprocess = clinical_preprocess()
     dtype = clinical_dtype(device)
     settings = {
@@ -138,17 +159,12 @@ def encode_clinical(rows: pd.DataFrame, data_dir: Path, device: torch.device, ba
         "dtype": str(dtype),
         "feature_cache_version": str(FEATURE_CACHE_VERSION),
         "image_columns": "clinical_path",
+        **(image_settings or {}),
     }
 
+    def prepare(photo: Image.Image) -> torch.Tensor:
+        return cast(torch.Tensor, preprocess(prepare_photo(photo) if prepare_photo else photo))
+
     return cached_embeddings(
-        NAME,
-        rows,
-        data_dir,
-        device,
-        batch_size,
-        ["clinical_path"],
-        preprocess,
-        lambda: load_clinical_encoder(data_dir, device),
-        settings,
-        dtype=dtype,
+        NAME, rows, data_dir, device, batch_size, prepare, lambda: load_clinical_encoder(data_dir, device), settings, dtype=dtype
     )

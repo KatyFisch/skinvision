@@ -1,14 +1,17 @@
-"""Export the paired MEL-vs-NV subset of the frozen MILK10k splits."""
+"""Freeze grouped MILK10k assignments for the 11-class and MEL-vs-NV tasks."""
 
 import argparse
 import hashlib
 import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from typing import cast
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedGroupKFold
+
+from classifiers.catalog import MILK_DIAGNOSES
 
 MANIFEST_NAME = "milk10k-mel-nv-v1.csv"
 FULL_MANIFEST_NAME = "milk10k-v1.csv"
@@ -34,6 +37,8 @@ def load_lesions(data_dir: Path) -> pd.DataFrame:
     targets = pd.read_csv(data_dir / "MILK10k_Training_GroundTruth.csv").set_index("lesion_id")
     if not targets.index.is_unique:
         raise ValueError("Ground truth needs a unique lesion_id per row")
+    if set(targets.columns) != set(MILK_DIAGNOSES):
+        raise ValueError("Expected the 11 MILK10k diagnosis columns")
     if not targets.isin([0, 1]).to_numpy().all() or not targets.sum(axis=1).eq(1).all():
         raise ValueError("Expected one active diagnosis per lesion")
     if set(paths.index) != set(targets.index):
@@ -102,7 +107,7 @@ def assign_splits(lesions: pd.DataFrame) -> pd.DataFrame:
     test_ids = lesions.index[test_rows]
     development = lesions.drop(index=test_ids)
 
-    assignments = lesions[["diagnosis_code", "clinical_path", "dermoscopic_path", "group_id"]].copy()
+    assignments = cast(pd.DataFrame, lesions[["diagnosis_code", "clinical_path", "dermoscopic_path", "group_id"]].copy())
     assignments["split"] = "train"
     assignments.loc[test_ids, "split"] = "test"
     assignments["validation_fold"] = pd.Series(pd.NA, index=assignments.index, dtype="Int64")
@@ -132,6 +137,16 @@ def save_manifest(manifest: pd.DataFrame, path: Path) -> None:
                 raise ValueError(f"Frozen manifest differs at {path}. Use a new manifest version for changed assignments.") from None
 
 
+def freeze_splits(data_dir: Path, *, include_full: bool = True) -> pd.DataFrame:
+    lesions = load_lesions(data_dir)
+    lesions["group_id"] = duplicate_groups(lesions, data_dir)
+    assignments = assign_splits(lesions)
+    save_manifest(filter_mel_nv(assignments), data_dir / "splits" / MANIFEST_NAME)
+    if include_full:
+        save_manifest(assignments, data_dir / "splits" / FULL_MANIFEST_NAME)
+    return assignments
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     default_dir = Path(__file__).resolve().parents[2] / "data"
@@ -140,16 +155,10 @@ def main() -> None:
     args = parser.parse_args()
     data_dir = args.data_dir.expanduser().resolve()
 
-    lesions = load_lesions(data_dir)
-    lesions["group_id"] = duplicate_groups(lesions, data_dir)
-    assignments = assign_splits(lesions)
-    manifest = filter_mel_nv(assignments)
+    manifest = filter_mel_nv(freeze_splits(data_dir, include_full=args.include_full))
     path = data_dir / "splits" / MANIFEST_NAME
-    save_manifest(manifest, path)
     if args.include_full:
-        full_path = data_dir / "splits" / FULL_MANIFEST_NAME
-        save_manifest(assignments, full_path)
-        print(f"Full manifest: {full_path}")
+        print(f"Full manifest: {data_dir / 'splits' / FULL_MANIFEST_NAME}")
 
     print(f"Manifest: {path}")
     print(pd.crosstab(manifest["diagnosis_code"], manifest["split"], margins=True).to_string())

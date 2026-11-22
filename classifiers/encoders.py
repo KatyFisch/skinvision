@@ -1,145 +1,69 @@
-"""Extract paired lesion features with frozen Torchvision encoders."""
+"""Decode clinical photos and cache frozen image embeddings."""
 
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from urllib.parse import urlparse
+from typing import cast
 
 import numpy as np
 import pandas as pd
 import torch
-import torchvision
 from PIL import Image, ImageOps
 from torch import nn
 from torchvision import transforms
-from torchvision.models import ConvNeXt_Tiny_Weights, ResNet18_Weights, convnext_tiny, resnet18
+from torchvision.models import ResNet18_Weights
 
-CHECKPOINTS = {
-    "resnet18": (ResNet18_Weights.IMAGENET1K_V1, "f37072fd47e89c5e827621c5baffa7500819f7896bbacec160b1a16c560e07ec"),
-    "convnext_tiny": (ConvNeXt_Tiny_Weights.IMAGENET1K_V1, "983f1562536e84ff750a1576fb08e54de751dbf2e17c0d8a4a13704341fdcd3d"),
-}
 FEATURE_CACHE_VERSION = 1
-IMAGE_COLUMNS = ["clinical_path", "dermoscopic_path"]
+
+# The U-Net and legacy cascade both use the ResNet-18 RGB normalization.
+_imagenet = ResNet18_Weights.IMAGENET1K_V1.transforms()
+_imagenet_normalize = transforms.Compose(
+    [transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float32), transforms.Normalize(_imagenet.mean, _imagenet.std)]
+)
 
 
-def build_preprocess(name: str, *, full_frame: bool = False, native_resolution: bool = False) -> Callable[[Image.Image], torch.Tensor]:
-    standard = CHECKPOINTS[name][0].transforms()
-    if not full_frame:
-        if native_resolution:
-            raise ValueError("Native resolution requires full-frame preprocessing")
-        return standard
-    resize = (
-        []
-        if native_resolution
-        else [transforms.Resize(standard.resize_size, interpolation=standard.interpolation, antialias=standard.antialias)]
-    )
-    return transforms.Compose(
-        [*resize, transforms.PILToTensor(), transforms.ConvertImageDtype(torch.float32), transforms.Normalize(standard.mean, standard.std)]
-    )
+def imagenet_normalize(photo: Image.Image) -> torch.Tensor:
+    return cast(torch.Tensor, _imagenet_normalize(photo))
 
 
-def load_image(path: Path, preprocess: Callable[[Image.Image], torch.Tensor]) -> torch.Tensor:
-    with Image.open(path) as photo:
-        return preprocess(ImageOps.exif_transpose(photo).convert("RGB"))
-
-
-def load_checkpoint(url: str, sha256: str, data_dir: Path, *, filename: str | None = None, publisher: str = "torchvision") -> Path:
-    path = data_dir / "checkpoints" / publisher / (filename or Path(urlparse(url).path).name)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        torch.hub.download_url_to_file(url, str(path), hash_prefix=sha256)
-    with path.open("rb") as checkpoint:
-        digest = hashlib.file_digest(checkpoint, "sha256").hexdigest()
-    if digest != sha256:
-        raise ValueError(f"Checksum mismatch for {path}. Remove the damaged file and rerun to download the official checkpoint.")
-    return path
-
-
-def build_encoder(name: str, checkpoint: Path, device: torch.device) -> nn.Module:
-    state = torch.load(checkpoint, map_location="cpu", weights_only=True)
-    if name == "resnet18":
-        model = resnet18()
-        model.load_state_dict(state)
-        model.set_submodule("fc", nn.Identity())
-    else:
-        model = convnext_tiny()
-        model.load_state_dict(state)
-        model.classifier[2] = nn.Identity()
-    return model.eval().requires_grad_(False).to(device)
-
-
-def feature_cache_path(
-    pairs: pd.DataFrame, data_dir: Path, name: str, settings: dict[str, str], *, image_columns: Sequence[str] = IMAGE_COLUMNS
-) -> Path:
-    digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
-    for column in image_columns:
-        for relative_path in pairs[column]:
-            image_stat = (data_dir / relative_path).stat()
-            digest.update(f"{relative_path}\0{image_stat.st_size}\0{image_stat.st_mtime_ns}\n".encode())
-    return data_dir / "experiments" / "mel-nv" / "features" / f"{name}-{digest.hexdigest()}.npy"
-
-
-def encode_pairs(
-    name: str,
-    pairs: pd.DataFrame,
-    data_dir: Path,
-    device: torch.device,
-    batch_size: int,
-    *,
-    image_columns: Sequence[str] = IMAGE_COLUMNS,
-    full_frame: bool = False,
-    native_resolution: bool = False,
-) -> tuple[np.ndarray, dict[str, str], bool]:
-    """Extract and concatenate the selected image views per lesion."""
-    weights, sha256 = CHECKPOINTS[name]
-    checkpoint = load_checkpoint(weights.url, sha256, data_dir)
-    preprocess = build_preprocess(name, full_frame=full_frame, native_resolution=native_resolution)
-    settings = {
-        "checkpoint": str(weights),
-        "url": weights.url,
-        "sha256": sha256,
-        "preprocessing": str(preprocess),
-        "torch": torch.__version__,
-        "torchvision": torchvision.__version__,
-        "device": str(device),
-        "feature_cache_version": str(FEATURE_CACHE_VERSION),
-    }
-    if tuple(image_columns) != tuple(IMAGE_COLUMNS):
-        settings["image_columns"] = ",".join(image_columns)
-    return cached_embeddings(
-        name, pairs, data_dir, device, batch_size, image_columns, preprocess, lambda: build_encoder(name, checkpoint, device), settings
-    )
+def load_rgb(path: Path) -> Image.Image:
+    with Image.open(path.expanduser()) as photo:
+        return ImageOps.exif_transpose(photo).convert("RGB")
 
 
 def cached_embeddings(
     name: str,
-    pairs: pd.DataFrame,
+    rows: pd.DataFrame,
     data_dir: Path,
     device: torch.device,
     batch_size: int,
-    image_columns: Sequence[str],
     preprocess: Callable[[Image.Image], torch.Tensor],
     load_encoder: Callable[[], nn.Module],
     settings: dict[str, str],
     *,
-    dtype: torch.dtype = torch.float32,
+    dtype: torch.dtype,
 ) -> tuple[np.ndarray, dict[str, str], bool]:
-    cache_path = feature_cache_path(pairs, data_dir, name, settings, image_columns=image_columns)
+    paths = rows["clinical_path"]
+    digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode())
+    for relative_path in paths:
+        image_stat = (data_dir / relative_path).stat()
+        digest.update(f"{relative_path}\0{image_stat.st_size}\0{image_stat.st_mtime_ns}\n".encode())
+    cache_path = data_dir / "experiments" / "mel-nv" / "features" / f"{name}-{digest.hexdigest()}.npy"
     if cache_path.is_file():
         return np.load(cache_path, allow_pickle=False), settings, True
 
     encoder = load_encoder()
     feature_batches = []
     with torch.inference_mode():
-        for start in range(0, len(pairs), batch_size):
-            batch = pairs.iloc[start : start + batch_size]
-            images = [load_image(data_dir / relative_path, preprocess) for column in image_columns for relative_path in batch[column]]
+        for start in range(0, len(rows), batch_size):
+            batch = paths.iloc[start : start + batch_size]
+            images = [preprocess(load_rgb(data_dir / path)) for path in batch]
             embeddings = encoder(torch.stack(images).to(device=device, dtype=dtype)).float().cpu().numpy()
-            feature_batches.append(np.concatenate(np.split(embeddings, len(image_columns)), axis=1))
-            if start == 0 or (start // batch_size + 1) % 10 == 0 or start + batch_size >= len(pairs):
-                print(f"{name}: encoded {min(start + batch_size, len(pairs))}/{len(pairs)} lesions", flush=True)
+            feature_batches.append(embeddings)
+            if start == 0 or (start // batch_size + 1) % 10 == 0 or start + batch_size >= len(rows):
+                print(f"{name}: encoded {min(start + batch_size, len(rows))}/{len(rows)} lesions", flush=True)
 
     features = np.concatenate(feature_batches)
     cache_path.parent.mkdir(parents=True, exist_ok=True)

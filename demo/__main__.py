@@ -14,11 +14,12 @@ from threading import Lock
 import torch
 from PIL import Image, ImageOps
 
-from classifiers.lesion_crop import PHOTO_SIZE, crop_with_skin_margin
-from classifiers.padded_crop import PaddedCropClassifier
+from classifiers.lesion_crop import crop_with_skin_margin, frame_photo
+from classifiers.model import DermFMClassifier
+from classifiers.segmentation import LesionSegmenter
 from classifiers.single_photo import PhotoClassifier
 from demo.samples import SAMPLE_ASSETS, SAMPLE_FOLDER, available_samples
-from demo.segmentation import LesionSegmenter, outline_path, overlay_png
+from demo.segmentation import outline_path, overlay_png
 
 ROOT = Path(__file__).resolve().parent
 MAX_UPLOAD_BYTES = 20 * 1024 * 1024
@@ -34,7 +35,7 @@ class DemoHandler(BaseHTTPRequestHandler):
     def __init__(
         self,
         *args,
-        classifier: PhotoClassifier | PaddedCropClassifier,
+        classifier: PhotoClassifier | DermFMClassifier,
         segmenter: LesionSegmenter,
         inference_lock: LockType,
         padded_crop: bool = False,
@@ -77,8 +78,8 @@ class DemoHandler(BaseHTTPRequestHandler):
             if stream:
                 self.start_reply(HTTPStatus.OK, ANALYSIS_STREAM)
             with self.inference_lock:
-                if self.padded_crop and photo.size != PHOTO_SIZE:
-                    photo = ImageOps.fit(photo, PHOTO_SIZE, Image.Resampling.LANCZOS)
+                if self.padded_crop:
+                    photo = frame_photo(photo)
                 mask = self.segmenter.mask(photo)
                 has_mask = mask.getbbox() is not None
                 overlay_mask = Image.new("L", photo.size, 255) if self.padded_crop and not has_mask else mask
@@ -186,7 +187,7 @@ def main() -> None:
         parser.error("Pass --segmentation-model with the U-Net checkpoint or its extracted folder.")
     device = torch.device(args.device or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"))
     torch.set_num_threads(min(4, torch.get_num_threads()))
-    classifier = PaddedCropClassifier(model, data_dir, device) if padded_crop else PhotoClassifier(model, device)
+    classifier = DermFMClassifier(model, data_dir, device, expected_task="padded_crop") if padded_crop else PhotoClassifier(model, device)
     segmenter = LesionSegmenter(checkpoint, device)
     handler = partial(
         DemoHandler,
