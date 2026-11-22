@@ -41,14 +41,21 @@ Clear notebook outputs before committing to keep lesion photos out of Git.
 
 ## Run the local photo demo
 
+Place the U-Net checkpoint at `models/unet_segmentation_full.pth`, or keep the
+extracted checkpoint in `models/unet_segmentation_full/`. Use
+`--segmentation-model` to load it from another location.
+
 ```sh
 uv run --locked python -m demo --model data/experiments/single-photo/20261121T200623773355Z/model.json
 ```
 
 Open `http://127.0.0.1:8765` and choose a curated JPEG or PNG. Drag the photo
 or use the arrow keys to move it within the preview. Adjust **Zoom** to change
-the framing, then select **Analyze photo** to run the classifier on the exact
-600 × 450 crop shown. The demo processes the crop in memory on your computer.
+the framing, then select **Analyze photo**. The U-Net finds the lesion area in
+the 600 × 450 crop. The preview dims the background while the classifier runs
+on the same crop with that background set to black. If the mask is empty, the
+demo asks for another crop. Processing stays in memory on your computer.
+The saved classifier cutoffs were evaluated on unmasked photos.
 Replace the model path with `model.json` from your own
 [single-photo evaluation run](classifiers/README.md#run-the-single-photo-pipeline),
 or put a link to it at `data/models/single-photo/model.json` to omit `--model`.

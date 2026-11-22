@@ -64,6 +64,7 @@ data/*
 # ============================================================
 
 # Model weights and checkpoints
+/models/unet_segmentation_full/
 *.pt
 *.pth
 *.ckpt

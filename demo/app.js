@@ -18,6 +18,7 @@ const choose = document.getElementById('choose');
 const preview = /** @type {HTMLCanvasElement} */ (document.getElementById('preview'));
 const context = preview.getContext('2d', { alpha: false });
 const cropFrame = document.getElementById('crop-frame');
+const maskOverlay = /** @type {HTMLImageElement} */ (document.getElementById('mask-overlay'));
 const cropControls = document.getElementById('crop-controls');
 const cropZoom = /** @type {HTMLInputElement} */ (document.getElementById('crop-zoom'));
 const cropZoomValue = document.getElementById('crop-zoom-value');
@@ -30,13 +31,16 @@ const analyzeLabel = document.getElementById('analyze-label');
 const analyzeIcon = document.getElementById('analyze-icon');
 const resultIdle = document.getElementById('result-idle');
 const resultLoading = document.getElementById('result-loading');
+const resultProgress = document.getElementById('result-progress');
 const resultDone = document.getElementById('result-done');
+const resultEmpty = document.getElementById('result-empty');
 
 let photo;
 let selection = 0;
 let crop;
 let drag;
 let request;
+let overlayUrl;
 
 function showError(message = '') {
   error.textContent = message;
@@ -44,19 +48,29 @@ function showError(message = '') {
 }
 
 function showResult(state) {
+  const busy = state === 'segmenting' || state === 'classifying';
   resultIdle.hidden = state !== 'idle';
-  resultLoading.hidden = state !== 'loading';
+  resultLoading.hidden = !busy;
   resultDone.hidden = state !== 'done';
-  const busy = state === 'loading';
+  resultEmpty.hidden = state !== 'empty';
+  if (busy) resultProgress.textContent = state === 'segmenting' ? 'Finding the lesion area…' : 'Analyzing the masked crop…';
   analyze.setAttribute('aria-disabled', String(!photo || busy));
   analyze.title = busy ? 'Analysis is running' : photo ? '' : 'Choose a photo first';
   analyzeLabel.textContent = busy ? 'Analyzing…' : 'Analyze photo';
   analyzeIcon.hidden = busy;
 }
 
+function clearOverlay() {
+  cropFrame.classList.remove('is-segmenting', 'has-mask');
+  if (overlayUrl) URL.revokeObjectURL(overlayUrl);
+  overlayUrl = undefined;
+  maskOverlay.removeAttribute('src');
+}
+
 function clearAnalysis() {
   request?.abort();
   request = undefined;
+  clearOverlay();
   showError();
   showResult('idle');
 }
@@ -217,12 +231,43 @@ document.addEventListener('paste', (event) => {
   setPhoto(image);
 });
 
+/** @param {ReadableStream<Uint8Array>} body */
+async function* analysisEvents(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let tail = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return;
+      const lines = (tail + decoder.decode(value, { stream: true })).split('\n');
+      tail = lines.pop();
+      for (const line of lines) yield JSON.parse(line);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+async function revealMask(encoded, pending) {
+  const png = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+  overlayUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+  maskOverlay.src = overlayUrl;
+  await maskOverlay.decode();
+  if (request !== pending) return;
+  cropFrame.classList.replace('is-segmenting', 'has-mask');
+  showResult('classifying');
+  await Promise.allSettled(maskOverlay.getAnimations().map((animation) => animation.finished));
+}
+
 analyze.addEventListener('click', async () => {
   if (!photo || request) return;
   const pending = new AbortController();
   request = pending;
   showError();
-  showResult('loading');
+  clearOverlay();
+  cropFrame.classList.add('is-segmenting');
+  showResult('segmenting');
 
   try {
     /** @type {Blob | null} */
@@ -231,22 +276,36 @@ analyze.addEventListener('click', async () => {
     if (!croppedPhoto) throw new Error('The crop could not be prepared. Try again.');
     const response = await fetch('/api/predict', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
+      headers: { 'Content-Type': 'application/octet-stream', Accept: 'application/x-ndjson' },
       body: croppedPhoto,
       signal: pending.signal,
     });
-    const data = await response.json();
     if (request !== pending) return;
-    if (!response.ok) throw new Error(data.error);
+    if (!response.ok) throw new Error((await response.json()).error);
 
-    document.querySelector('#result-code').textContent = data.research_prediction;
-    document.querySelector('#result-label').textContent = labels[data.research_prediction] ?? data.research_prediction;
-    document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
-    showResult('done');
+    for await (const data of analysisEvents(response.body)) {
+      if (request !== pending) return;
+      if (data.error) throw new Error(data.error);
+      if (data.overlay) {
+        await revealMask(data.overlay, pending);
+        continue;
+      }
+
+      if (data.research_prediction === null) {
+        showResult('empty');
+      } else {
+        document.querySelector('#result-code').textContent = data.research_prediction;
+        document.querySelector('#result-label').textContent = labels[data.research_prediction] ?? data.research_prediction;
+        document.querySelector('#result-route').textContent = data.route === 'MEL_OR_NV' ? 'MEL vs NV' : 'Other diagnoses';
+        showResult('done');
+      }
+      return;
+    }
+    throw new Error('Analysis ended early. Try again.');
   } catch (cause) {
     if (request !== pending) return;
+    clearAnalysis();
     showError(cause instanceof TypeError ? 'Could not reach the demo. Check that it is running and try again.' : cause.message);
-    showResult('idle');
   } finally {
     if (request === pending) request = undefined;
   }

@@ -1,0 +1,75 @@
+import json
+from base64 import b64decode
+from functools import partial
+from http.client import HTTPConnection
+from http.server import ThreadingHTTPServer
+from io import BytesIO
+from threading import Event, Lock, Thread
+from unittest import TestCase
+from unittest.mock import Mock
+
+from PIL import Image, ImageChops
+
+from demo.__main__ import ANALYSIS_STREAM, DemoHandler
+
+
+class DemoSegmentationTest(TestCase):
+    def setUp(self) -> None:
+        self.photo = Image.new("RGB", (600, 450), (190, 140, 110))
+        self.mask = Image.new("L", self.photo.size)
+        self.classifier = Mock()
+        segmenter = Mock()
+        segmenter.mask.return_value = self.mask
+        handler = partial(DemoHandler, classifier=self.classifier, segmenter=segmenter, inference_lock=Lock())
+        server = self.enterContext(ThreadingHTTPServer(("127.0.0.1", 0), handler))
+        Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        self.client = HTTPConnection("127.0.0.1", server.server_port, timeout=5)
+        self.addCleanup(self.client.close)
+
+    def send_photo(self, accept: str) -> None:
+        with BytesIO() as buffer:
+            self.photo.save(buffer, format="PNG")
+            self.client.request("POST", "/api/predict", buffer.getvalue(), {"Content-Type": "application/octet-stream", "Accept": accept})
+
+    def test_streams_overlay_before_returning_prediction_on_the_same_mask(self) -> None:
+        self.mask.paste(255, (200, 120, 390, 290))
+        release_classifier = Event()
+        self.addCleanup(release_classifier.set)
+
+        def predict(_image: Image.Image) -> dict[str, str]:
+            if not release_classifier.wait(timeout=5):
+                raise RuntimeError("Client did not receive the overlay before classification finished")
+            return {"research_prediction": "NV", "route": "MEL_OR_NV"}
+
+        self.classifier.predict.side_effect = predict
+        self.send_photo(ANALYSIS_STREAM)
+
+        with self.client.getresponse() as response:
+            self.assertEqual(response.getheader("Content-Type"), ANALYSIS_STREAM)
+            event = json.loads(response.readline())
+            with Image.open(BytesIO(b64decode(event["overlay"]))) as overlay:
+                self.assertEqual(overlay.size, self.photo.size)
+                self.assertEqual(overlay.getpixel((10, 10)), (0, 0, 0, 75))
+                self.assertEqual(overlay.getpixel((250, 180)), (0, 0, 0, 0))
+                self.assertIsNone(
+                    ImageChops.difference(overlay.getchannel("A").point(lambda value: 0 if value else 255), self.mask).getbbox()
+                )
+
+            release_classifier.set()
+            self.assertEqual(json.loads(response.readline()), {"research_prediction": "NV", "route": "MEL_OR_NV"})
+
+        classified = self.classifier.predict.call_args.args[0]
+        expected = Image.composite(self.photo, Image.new("RGB", self.photo.size), self.mask)
+        self.assertIsNone(ImageChops.difference(classified, expected).getbbox())
+
+    def test_empty_mask_skips_classification(self) -> None:
+        self.send_photo("application/json")
+        with self.client.getresponse() as response:
+            self.assertEqual(response.status, 200)
+            result = json.load(response)
+        self.assertIsNone(result["research_prediction"])
+        self.assertIsNone(result["route"])
+        with Image.open(BytesIO(b64decode(result["overlay"]))) as overlay:
+            self.assertEqual(overlay.getchannel("A").getextrema(), (75, 75))
+        self.classifier.predict.assert_not_called()

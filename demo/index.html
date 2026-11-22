@@ -34,7 +34,9 @@
           </div>
           <div class="crop-frame" id="crop-frame" hidden>
             <canvas id="preview" width="600" height="450" tabindex="0" role="img" aria-label="600 by 450 crop preview" aria-describedby="crop-help"></canvas>
+            <img class="mask-overlay" id="mask-overlay" alt="" aria-hidden="true">
             <div class="crop-grid" aria-hidden="true"></div>
+            <div class="mask-scan" aria-hidden="true"></div>
           </div>
         </div>
         <div class="crop-controls" id="crop-controls" hidden>
@@ -70,18 +72,22 @@
             </div>
             <div id="result-loading" class="result-placeholder" hidden>
               <span class="spinner" aria-hidden="true"></span>
-              <p>Analyzing photo…</p>
+              <p id="result-progress">Finding the lesion area…</p>
             </div>
             <div id="result-done" class="result-done" hidden>
               <p class="result-code" id="result-code"></p>
               <p class="result-label" id="result-label"></p>
               <dl class="result-details"><dt>Classifier branch</dt><dd id="result-route"></dd></dl>
             </div>
+            <div id="result-empty" class="result-done" hidden>
+              <p class="result-label">No lesion area found</p>
+              <p class="result-empty-help">Adjust the crop so it includes the whole lesion and try again.</p>
+            </div>
           </div>
         </section>
         <aside class="research-note" aria-labelledby="research-title">
           <h2 id="research-title">Research use only</h2>
-          <p>Use curated examples. This model was evaluated on clinic photos and produced many false melanoma flags. Use a clinician’s assessment for personal skin concerns.</p>
+          <p>Use curated examples. The classifiers produced many false melanoma flags on unmasked clinic photos. Masked predictions are experimental. Use a clinician’s assessment for personal skin concerns.</p>
         </aside>
       </div>
     </div>
