@@ -75,7 +75,7 @@ the 600 × 450 crop, and the preview traces the detected area. The classifier
 uses the lesion-centered crop with surrounding skin and displays a melanoma
 research score band. The pulsing Grad-CAM overlay highlights stronger positive
 contributions to the returned class inside the original U-Net outline. It
-shows normalized heat above 0.55 and reaches at most 75% opacity. When the mask
+shows normalized heat above 0.40 and reaches at most 75% opacity. When the mask
 is empty, the classifier uses the original crop and notes that on the result.
 Processing stays in memory on your computer.
 

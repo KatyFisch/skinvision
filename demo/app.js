@@ -82,6 +82,10 @@ function showPrediction(data) {
     heatmapUrl = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
     heatmapOverlay.src = heatmapUrl;
     heatmapOverlay.hidden = false;
+    heatmapNote.textContent = 'Grad-CAM shown inside the lesion outline';
+    heatmapNote.hidden = false;
+  } else if (data.heatmap === null) {
+    heatmapNote.textContent = 'No strong Grad-CAM activations inside the lesion outline';
     heatmapNote.hidden = false;
   }
   const bandLabel = melanomaBands[data.melanoma_score_band];

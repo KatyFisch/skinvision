@@ -96,9 +96,7 @@ class DemoHandler(BaseHTTPRequestHandler):
                     if stream and isinstance(self.classifier, DermFMClassifier) and (box := skin_margin_box(photo, mask)) is not None:
                         try:
                             heat = padded_crop_heatmap(prepared, self.classifier, str(result["research_prediction"]))
-                            overlay_image = heatmap_overlay(heat, mask, box)
-                            if overlay_image is not None:
-                                result["heatmap"] = overlay_image
+                            result["heatmap"] = heatmap_overlay(heat, mask, box)
                         except RuntimeError as error:
                             self.log_error("Grad-CAM unavailable: %s", error)
                 elif has_mask:

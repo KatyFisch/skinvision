@@ -145,7 +145,7 @@ h1, h2, p, ul, dl, dd { margin: 0; }
 .photo-guide li { display: grid; gap: 2px; align-content: start; }
 .photo-guide li span { color: var(--muted); font-size: 14px; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulse-heatmap { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes pulse-heatmap { 0%, 88%, 100% { opacity: 0; } 20%, 40% { opacity: 1; } }
 @keyframes appear { from { opacity: 0; transform: translateY(3px); } }
 @keyframes draw-outline {
   from { stroke-dasharray: 1; stroke-dashoffset: 1; }

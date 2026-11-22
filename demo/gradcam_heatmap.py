@@ -33,7 +33,7 @@ from classifiers import dermfm_zero
 from classifiers.export_padded_crop import PaddedCropScoreModel, head_tensors
 from classifiers.model import DermFMClassifier
 
-HEAT_THRESHOLD = 0.55
+HEAT_THRESHOLD = 0.40
 MAX_HEATMAP_ALPHA = round(0.75 * 255)
 
 
@@ -173,7 +173,9 @@ def heatmap_overlay(heatmap: np.ndarray, mask: Image.Image, box: tuple[int, int,
     alpha = np.rint(np.sqrt(strength) * MAX_HEATMAP_ALPHA).astype(np.uint8)
     if not alpha.any():
         return None
-    rgba = np.stack((np.full_like(alpha, 255), np.rint(205 - 160 * strength).astype(np.uint8), np.full_like(alpha, 55), alpha), axis=-1)
+    green = np.rint(100 + 139 * strength).astype(np.uint8)
+    blue = np.rint(75 + 62 * strength).astype(np.uint8)
+    rgba = np.stack((np.full_like(alpha, 255), green, blue, alpha), axis=-1)
     with BytesIO() as buffer:
         Image.fromarray(rgba).save(buffer, format="PNG")
         return b64encode(buffer.getvalue()).decode("ascii")
