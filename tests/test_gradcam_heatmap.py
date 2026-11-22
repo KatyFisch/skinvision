@@ -10,7 +10,7 @@ from demo.gradcam_heatmap import MAX_HEATMAP_ALPHA, heatmap_overlay
 
 class HeatmapOverlayTest(TestCase):
     def test_projects_heat_into_crop_and_clips_to_mask(self) -> None:
-        heat = np.array([[0.39, 1.0], [0.8, 0.5]], dtype=np.float32)
+        heat = np.array([[0.29, 1.0], [0.8, 0.35]], dtype=np.float32)
         mask = Image.new("L", (10, 8))
         mask.paste(255, (4, 3, 6, 5))
         mask.putpixel((4, 4), 0)
@@ -28,5 +28,5 @@ class HeatmapOverlayTest(TestCase):
         self.assertFalse(alpha[np.asarray(mask) == 0].any())
 
     def test_omits_overlay_when_heat_is_below_threshold(self) -> None:
-        heat = np.full((2, 2), 0.39, dtype=np.float32)
+        heat = np.full((2, 2), 0.29, dtype=np.float32)
         self.assertIsNone(heatmap_overlay(heat, Image.new("L", (2, 2), 255), (0, 0, 2, 2)))

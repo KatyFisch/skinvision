@@ -31,7 +31,7 @@ from torchvision import transforms
 
 from classifiers.export_padded_crop import PaddedCropTorchModel
 
-HEAT_THRESHOLD = 0.40
+HEAT_THRESHOLD = 0.30
 MAX_HEATMAP_ALPHA = round(0.75 * 255)
 
 

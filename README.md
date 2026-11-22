@@ -83,7 +83,7 @@ the 600 × 450 crop, and the preview traces the detected area. The classifier
 uses the lesion-centered crop with surrounding skin and displays **low**,
 **inconclusive**, or **high risk** based on its research score. The pulsing
 Grad-CAM overlay highlights stronger positive contributions to the returned
-class inside the original U-Net outline. It shows normalized heat above 0.40
+class inside the original U-Net outline. It shows normalized heat above 0.30
 and reaches at most 75% opacity. When the mask
 is empty, the classifier uses the original crop and the demo displays an
 inconclusive result with instructions to adjust the crop.
