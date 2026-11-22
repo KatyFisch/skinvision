@@ -45,8 +45,8 @@ def load_image(path: Path, preprocess: Callable[[Image.Image], torch.Tensor]) ->
         return preprocess(ImageOps.exif_transpose(photo).convert("RGB"))
 
 
-def load_checkpoint(url: str, sha256: str, data_dir: Path) -> Path:
-    path = data_dir / "checkpoints" / "torchvision" / Path(urlparse(url).path).name
+def load_checkpoint(url: str, sha256: str, data_dir: Path, *, filename: str | None = None, publisher: str = "torchvision") -> Path:
+    path = data_dir / "checkpoints" / publisher / (filename or Path(urlparse(url).path).name)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
         torch.hub.download_url_to_file(url, str(path), hash_prefix=sha256)
@@ -62,7 +62,7 @@ def build_encoder(name: str, checkpoint: Path, device: torch.device) -> nn.Modul
     if name == "resnet18":
         model = resnet18()
         model.load_state_dict(state)
-        model.fc = nn.Identity()
+        model.set_submodule("fc", nn.Identity())
     else:
         model = convnext_tiny()
         model.load_state_dict(state)
@@ -108,17 +108,35 @@ def encode_pairs(
     }
     if tuple(image_columns) != tuple(IMAGE_COLUMNS):
         settings["image_columns"] = ",".join(image_columns)
+    return cached_embeddings(
+        name, pairs, data_dir, device, batch_size, image_columns, preprocess, lambda: build_encoder(name, checkpoint, device), settings
+    )
+
+
+def cached_embeddings(
+    name: str,
+    pairs: pd.DataFrame,
+    data_dir: Path,
+    device: torch.device,
+    batch_size: int,
+    image_columns: Sequence[str],
+    preprocess: Callable[[Image.Image], torch.Tensor],
+    load_encoder: Callable[[], nn.Module],
+    settings: dict[str, str],
+    *,
+    dtype: torch.dtype = torch.float32,
+) -> tuple[np.ndarray, dict[str, str], bool]:
     cache_path = feature_cache_path(pairs, data_dir, name, settings, image_columns=image_columns)
     if cache_path.is_file():
         return np.load(cache_path, allow_pickle=False), settings, True
 
-    encoder = build_encoder(name, checkpoint, device)
+    encoder = load_encoder()
     feature_batches = []
     with torch.inference_mode():
         for start in range(0, len(pairs), batch_size):
             batch = pairs.iloc[start : start + batch_size]
             images = [load_image(data_dir / relative_path, preprocess) for column in image_columns for relative_path in batch[column]]
-            embeddings = encoder(torch.stack(images).to(device)).cpu().numpy()
+            embeddings = encoder(torch.stack(images).to(device=device, dtype=dtype)).float().cpu().numpy()
             feature_batches.append(np.concatenate(np.split(embeddings, len(image_columns)), axis=1))
             if start == 0 or (start // batch_size + 1) % 10 == 0 or start + batch_size >= len(pairs):
                 print(f"{name}: encoded {min(start + batch_size, len(pairs))}/{len(pairs)} lesions", flush=True)

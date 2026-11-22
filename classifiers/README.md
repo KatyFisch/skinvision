@@ -140,6 +140,59 @@ MILK10k close-ups are clinic photos. This run measures how the pipeline
 works on those photos. Independent evaluation on self-taken photos and
 clinical review are needed before using it for people's skin concerns.
 
+## Compare three single-photo classifier designs
+
+```sh
+uv run --locked python -m classifiers.compare_clinical --encoder resnet18
+uv run --locked python -m classifiers.compare_clinical --encoder panderm_base
+```
+
+Use `--data-dir` to point to an existing MILK10k catalog and frozen splits.
+Both commands cache embeddings from the same native 600 × 450 clinical
+photos. PanDerm Base uses the published ViT-B/16 weights, with positional
+interpolation and zero padding to complete edge patches. The encoder stays
+frozen. [PanDerm checkpoint and license](https://github.com/SiyuanYan1/PanDerm#1-download-panderm-pre-trained-weights) ·
+[PanDerm paper and pretraining sources](https://doi.org/10.1038/s41591-025-03747-y)
+
+The experiment compares a refitted cascade, a binary head trained on melanoma
+and all other diagnoses, and a direct 11-class head. Every head uses regularized
+logistic regression. A deterministic group-stratified sample of 825 development
+lesions (72 melanomas) calibrates the cutoffs. The three ensemble members each
+train on the non-calibration groups from two frozen folds. The same fitted
+members and probability averaging score calibration and the 1,048-lesion
+holdout. All six configs flagged 69 of 72 calibration melanomas at the 95%
+target. The cascade retains its 99% routing target. The 11-class decisions
+use the melanoma cutoff, then the highest-scoring other class for unflagged
+lesions.
+
+| Frozen encoder | Classifier | Holdout melanomas flagged | Specificity | Melanoma AUROC | Macro F1 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| ResNet-18 | Cascade | 86/90 | 26.8% | 0.681 | 0.093 |
+| ResNet-18 | Melanoma vs. rest | 86/90 | 40.3% | 0.827 | — |
+| ResNet-18 | Direct 11-class | 88/90 | 47.5% | 0.853 | 0.163 |
+| PanDerm Base | Cascade | 79/90 | 24.3% | 0.626 | 0.102 |
+| PanDerm Base | Melanoma vs. rest | 87/90 | 56.3% | 0.857 | — |
+| PanDerm Base | Direct 11-class | 83/90 | 59.6% | 0.871 | 0.237 |
+
+At the locked cutoffs, PanDerm melanoma-vs-rest flagged 153 fewer
+non-melanomas than the equivalent ResNet-18 head and flagged one additional
+melanoma. PanDerm's direct head improved macro F1, but its achieved sensitivity
+was 92.2%. When comparing ranking at the same 86 of 90 holdout melanomas,
+specificity was 59.5% for PanDerm melanoma-vs-rest, 53.3% for ResNet-18 direct,
+and 46.7% for PanDerm direct. The latter comparison uses holdout labels to find
+the operating points and is descriptive.
+
+PanDerm's pretraining includes ISIC Archive data. MILK10k includes lesions
+previously archived in ISIC, and available provenance does not establish
+whether earlier images of these lesions were used in the checkpoint. Treat the
+comparison as exploratory. The local holdout is also from the same clinic-photo
+release used for development. [MILK10k dataset provenance](https://api.isic-archive.com/doi/milk10k/)
+
+Each run writes local `heads.joblib`, calibration and holdout predictions,
+and `metrics.json` with cutoffs, provenance, and per-class recall under
+`data/experiments/clinical-comparison/`. The demo uses its existing fitted
+cascade.
+
 ## Compare frozen paired-image encoders
 
 From the repository root, run the comparison using the existing

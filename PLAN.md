@@ -126,6 +126,11 @@ between datasets.
   run flagged 89 of 90 melanomas and 871 of 958 non-melanomas at the locked
   development cutoffs. Improve specificity and evaluate the pipeline
   separately on self-taken photos.
+- Carry forward the melanoma-vs-rest head on frozen PanDerm Base features as
+  the strongest candidate at the sensitivity target. It flagged 87 of 90
+  melanomas and 419 of 958 non-melanomas on the same holdout. Keep the direct
+  11-class head as a candidate for differential diagnosis.
+  [Clinical classifier comparison](classifiers/README.md#compare-three-single-photo-classifier-designs)
 - Carry forward the clinical MEL-vs-NV model trained on the original
   600 × 450 photos, with five epochs of fine-tuning and a refitted head.
   The three selected development checkpoints are in
